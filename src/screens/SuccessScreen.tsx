@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { SafeAreaView, StyleSheet, Text, View, Pressable } from 'react-native';
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import theme from '../theme';
 import { RootStackParamList } from '../types';
 
@@ -10,6 +10,7 @@ export default function SuccessScreen({ route, navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.page}>
+      <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.card}>
         <View style={styles.checkmark}>
           <Text style={styles.checkmarkText}>✓</Text>
@@ -41,6 +42,7 @@ export default function SuccessScreen({ route, navigation }: Props) {
           </Pressable>
         </View>
       </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -49,24 +51,28 @@ const styles = StyleSheet.create({
   page: {
     flex: 1,
     backgroundColor: theme.colors.background,
-    padding: 24,
+  },
+  content: {
+    padding: 20,
+    paddingBottom: 36,
   },
   card: {
-    flex: 1,
     backgroundColor: theme.colors.surface,
-    borderRadius: 28,
-    padding: 26,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: 18,
     shadowColor: theme.colors.shadow,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.1,
+    shadowRadius: 24,
     elevation: 4,
   },
   checkmark: {
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: theme.colors.success,
+    backgroundColor: theme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
@@ -89,10 +95,12 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   infoCard: {
-    padding: 20,
-    borderRadius: 22,
-    backgroundColor: theme.colors.background,
-    marginBottom: 24,
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceStrong,
+    marginBottom: 16,
   },
   infoLabel: {
     color: theme.colors.muted,
@@ -107,10 +115,12 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   translatedCard: {
-    padding: 20,
-    borderRadius: 22,
-    backgroundColor: '#eaf5f9',
-    marginBottom: 24,
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(4, 125, 118, 0.22)',
+    backgroundColor: 'rgba(4, 125, 118, 0.06)',
+    marginBottom: 16,
   },
   translatedTitle: {
     fontSize: 15,
@@ -135,7 +145,7 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-    borderRadius: 18,
+    borderRadius: 8,
     paddingVertical: 16,
     alignItems: 'center',
   },

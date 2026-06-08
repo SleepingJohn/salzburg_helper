@@ -4,6 +4,7 @@ export type TrackingStatus = {
   label: string;
   completed: boolean;
   description: string;
+  timestamp: string;
 };
 
 const MOCK_REPORT = {
@@ -80,10 +81,10 @@ export async function fetchTrackingStatus(): Promise<TrackingStatus[]> {
   return new Promise(resolve => {
     setTimeout(() => {
       resolve([
-        { label: 'Received', completed: true, description: 'Your report has been registered.' },
-        { label: 'Assigned', completed: true, description: 'A team has been notified.' },
-        { label: 'In Progress', completed: false, description: 'Cleanup is underway.' },
-        { label: 'Completed', completed: false, description: 'The issue will be closed soon.' },
+        { label: 'Received', completed: true, description: 'Your report has been registered.', timestamp: 'Today 10:42' },
+        { label: 'Assigned', completed: true, description: 'Public Cleaning Services has been notified.', timestamp: 'Today 10:44' },
+        { label: 'In Progress', completed: false, description: 'Cleanup is scheduled with the next city route.', timestamp: 'Pending' },
+        { label: 'Completed', completed: false, description: 'The report will close after field confirmation.', timestamp: 'Pending' },
       ]);
     }, 600);
   });

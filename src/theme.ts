@@ -1,17 +1,19 @@
 const theme = {
   colors: {
-    background: '#f8fafc',
+    background: '#f6f7f4',
     surface: '#ffffff',
-    primary: '#044a72',
-    secondary: '#1f6f94',
-    accent: '#fbbf24',
-    text: '#102a43',
-    muted: '#64748b',
-    border: '#e2e8f0',
-    success: '#16a34a',
-    shadow: 'rgba(15, 23, 42, 0.08)',
+    surfaceStrong: '#f0f5f4',
+    primary: '#047d76',
+    secondary: '#075c58',
+    accent: '#b18416',
+    danger: '#c4513a',
+    text: '#1f2933',
+    muted: '#667085',
+    border: '#d8dedb',
+    success: '#247a4d',
+    shadow: 'rgba(31, 41, 51, 0.09)',
   },
-  radius: 24,
+  radius: 8,
 };
 
 export default theme;

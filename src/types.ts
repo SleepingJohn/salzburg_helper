@@ -4,7 +4,6 @@ export type RootStackParamList = {
   Processing: {
     nativeLanguage: string;
     mockTranscript: string;
-    voiceUri?: string;
   };
   Success: {
     citizenMessage: string;
@@ -15,6 +14,7 @@ export type RootStackParamList = {
     nativeLanguage: string;
   };
   Tracking: undefined;
+  AuthorityDashboard: undefined;
 };
 
 export type ReportSummary = {

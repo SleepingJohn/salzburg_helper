@@ -8,16 +8,21 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Welcome'>;
 export default function WelcomeScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.page}>
-      <View style={styles.card}>
+      <View style={styles.shell}>
         <View style={styles.branding}>
-          <View style={styles.brandMark} />
-          <Text style={styles.brandText}>Stadt Salzburg</Text>
+          <View style={styles.brandMark}>
+            <Text style={styles.brandMarkText}>SS</Text>
+          </View>
+          <View>
+            <Text style={styles.brandText}>Stadt Salzburg</Text>
+            <Text style={styles.brandSubtext}>Smart citizen reporting</Text>
+          </View>
         </View>
 
         <Text style={styles.headline}>Report a Problem Nearby</Text>
         <Text style={styles.subtitle}>Speak in any language and the city will understand.</Text>
 
-        <View style={styles.heroCard}>
+        <View style={styles.panel}>
           <Text style={styles.heroTitle}>Smart multilingual civic reporting</Text>
           <Text style={styles.heroBody}>
             Scan the QR code, speak naturally, and receive confirmation in your language.
@@ -26,6 +31,10 @@ export default function WelcomeScreen({ navigation }: Props) {
 
         <Pressable style={styles.button} onPress={() => navigation.navigate('Record')}>
           <Text style={styles.buttonText}>Start Report</Text>
+        </Pressable>
+
+        <Pressable style={styles.secondaryButton} onPress={() => navigation.navigate('AuthorityDashboard')}>
+          <Text style={styles.secondaryButtonText}>City Authority Dashboard</Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -36,49 +45,66 @@ const styles = StyleSheet.create({
   page: {
     flex: 1,
     backgroundColor: theme.colors.background,
-    padding: 24,
   },
-  card: {
+  shell: {
     flex: 1,
     justifyContent: 'center',
+    padding: 20,
   },
   branding: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 22,
   },
   brandMark: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: theme.colors.primary,
-    marginRight: 12,
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: theme.colors.text,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  brandMarkText: {
+    color: '#fff',
+    fontWeight: '900',
   },
   brandText: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: theme.colors.primary,
+    fontSize: 20,
+    fontWeight: '900',
+    color: theme.colors.text,
+  },
+  brandSubtext: {
+    color: theme.colors.muted,
+    fontSize: 14,
+    marginTop: 3,
   },
   headline: {
     fontSize: 34,
     fontWeight: '900',
     color: theme.colors.text,
     lineHeight: 42,
+    marginBottom: 10,
   },
   subtitle: {
     fontSize: 16,
     lineHeight: 24,
     color: theme.colors.muted,
     maxWidth: '90%',
+    marginBottom: 20,
   },
-  heroCard: {
+  panel: {
     backgroundColor: theme.colors.surface,
-    borderRadius: 28,
-    padding: 22,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: 18,
     shadowColor: theme.colors.shadow,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.1,
     shadowRadius: 24,
     elevation: 2,
+    marginBottom: 18,
   },
   heroTitle: {
     fontSize: 18,
@@ -92,9 +118,8 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   button: {
-    marginTop: 12,
     backgroundColor: theme.colors.primary,
-    borderRadius: 18,
+    borderRadius: 8,
     paddingVertical: 16,
     alignItems: 'center',
     shadowColor: theme.colors.shadow,
@@ -107,5 +132,19 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 17,
     fontWeight: '700',
+  },
+  secondaryButton: {
+    marginTop: 10,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 8,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    color: theme.colors.text,
+    fontSize: 16,
+    fontWeight: '800',
   },
 });

@@ -12,7 +12,10 @@ export default function StatusTimeline({ statuses }: { statuses: TrackingStatus[
             {index < statuses.length - 1 && <View style={styles.line} />}
           </View>
           <View style={styles.detailColumn}>
-            <Text style={[styles.label, item.completed && styles.labelActive]}>{item.label}</Text>
+            <View style={styles.labelRow}>
+              <Text style={[styles.label, item.completed && styles.labelActive]}>{item.label}</Text>
+              <Text style={styles.timestamp}>{item.timestamp}</Text>
+            </View>
             <Text style={styles.description}>{item.description}</Text>
           </View>
         </View>
@@ -24,7 +27,9 @@ export default function StatusTimeline({ statuses }: { statuses: TrackingStatus[
 const styles = StyleSheet.create({
   container: {
     backgroundColor: theme.colors.surface,
-    borderRadius: 24,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     padding: 18,
     shadowColor: theme.colors.shadow,
     shadowOffset: { width: 0, height: 8 },
@@ -60,13 +65,24 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingLeft: 16,
   },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
   label: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '900',
     color: theme.colors.text,
   },
   labelActive: {
     color: theme.colors.primary,
+  },
+  timestamp: {
+    color: theme.colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
   },
   description: {
     marginTop: 4,

@@ -16,7 +16,6 @@ const steps = [
 export default function ProcessingScreen({ route, navigation }: Props) {
   const [currentStep, setCurrentStep] = useState(0);
   const [transcript, setTranscript] = useState('');
-  const [germanMessage, setGermanMessage] = useState('');
   const [summary, setSummary] = useState<ReportSummary | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -39,7 +38,6 @@ export default function ProcessingScreen({ route, navigation }: Props) {
       if (!mounted) {
         return;
       }
-      setGermanMessage(translatedMessage);
       setCurrentStep(2);
 
       const result = await routeToAuthority(translatedMessage);
@@ -84,7 +82,6 @@ export default function ProcessingScreen({ route, navigation }: Props) {
     setIsRefreshingSummary(true);
     setTranscript(cleanedTranscript);
     const translatedMessage = await translateToGerman(cleanedTranscript);
-    setGermanMessage(translatedMessage);
     const result = await routeToAuthority(translatedMessage);
     setSummary(result);
     setIsEditing(false);
@@ -197,16 +194,19 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   content: {
-    padding: 24,
+    padding: 20,
+    paddingBottom: 36,
   },
   card: {
     backgroundColor: theme.colors.surface,
-    borderRadius: 28,
-    padding: 26,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: 18,
     shadowColor: theme.colors.shadow,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.1,
+    shadowRadius: 24,
     elevation: 4,
   },
   title: {
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
   },
   resultCard: {
     backgroundColor: '#f8fafc',
-    borderRadius: 20,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: theme.colors.border,
     padding: 18,
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   editButton: {
-    borderRadius: 14,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: theme.colors.border,
     paddingHorizontal: 14,
@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
   },
   transcriptInput: {
     minHeight: 96,
-    borderRadius: 16,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.surface,
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   smallButton: {
-    borderRadius: 14,
+    borderRadius: 8,
     paddingHorizontal: 18,
     paddingVertical: 12,
     marginLeft: 10,
@@ -336,9 +336,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   summaryCard: {
-    backgroundColor: theme.colors.background,
-    borderRadius: 20,
-    padding: 20,
+    backgroundColor: theme.colors.surfaceStrong,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: 16,
     marginTop: 4,
   },
   summaryTitle: {
@@ -355,7 +357,7 @@ const styles = StyleSheet.create({
   },
   continueButton: {
     backgroundColor: theme.colors.primary,
-    borderRadius: 18,
+    borderRadius: 8,
     paddingVertical: 18,
     alignItems: 'center',
     marginTop: 22,
