@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Salzburg Citizen Report",
+    "slug": "salzburg-citizen-report",
+    "scheme": "salzburgreport",
+    "platforms": ["ios", "android", "web"],
+    "sdkVersion": "54.0.0",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"]
+  }
+}
