@@ -8,6 +8,23 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "android": {
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "READ_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Salzburg Citizen Report to choose photos for issue reports.",
+          "cameraPermission": "Allow Salzburg Citizen Report to take photos for issue reports."
+        }
+      ],
+      "expo-document-picker"
+    ],
     "assetBundlePatterns": ["**/*"]
   }
 }

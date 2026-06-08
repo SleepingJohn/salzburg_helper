@@ -10,6 +10,7 @@ A React Native + Expo prototype for a multilingual citizen reporting app for Sta
 - Success confirmation in multiple languages
 - Issue progress dashboard
 - Mock authority dashboard
+- Attachments: take a photo, choose a photo, or attach a file
 
 ## Run locally
 
@@ -48,5 +49,6 @@ If that port is busy, Expo may choose another one.
 ## Notes
 
 - The app uses mock AI data only.
+- Photo and file attachments work on Expo Web and Android/Expo Go.
 - Browser speech recognition works best in Chrome or Edge.
 - On Expo Go mobile, speech recognition falls back to the editable transcript field.

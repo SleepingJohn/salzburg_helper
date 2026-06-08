@@ -1,6 +1,11 @@
 export type RootStackParamList = {
   Welcome: undefined;
-  Record: undefined;
+  Record: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    address: string;
+  };
   Processing: {
     nativeLanguage: string;
     mockTranscript: string;
