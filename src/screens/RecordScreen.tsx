@@ -3,12 +3,14 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { Image, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import AnimatedWaveform from '../components/AnimatedWaveform';
+import { Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import theme from '../theme';
 import { RootStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Record'>;
+
+const citizenGreen = '#2E7F18';
+const brandRed = '#A20B0B';
 
 type SpeechRecognitionEvent = {
   results: {
@@ -58,6 +60,10 @@ const formatTime = (value: number) => {
 };
 
 export default function RecordScreen({ route, navigation }: Props) {
+  const [fullName, setFullName] = useState([route.params.firstName, route.params.lastName].filter(Boolean).join(' '));
+  const [email, setEmail] = useState(route.params.email);
+  const [address, setAddress] = useState(route.params.address);
+  const [issueTitle, setIssueTitle] = useState('');
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [hasRecording, setHasRecording] = useState(false);
@@ -160,40 +166,12 @@ export default function RecordScreen({ route, navigation }: Props) {
     setSpeechStatus('Recording stopped. Review or edit the transcript.');
   };
 
-  const discardRecording = () => {
-    recognition.current?.stop();
-    recognition.current = null;
-    setRecording(false);
-    setHasRecording(false);
-    setSeconds(0);
-    setVoiceMessage('');
-    setSpeechStatus(
-      speechSupported
-        ? 'Ready for voice recognition. Use Chrome or Edge and allow microphone access.'
-        : 'Real speech-to-text is available in Expo Web only. Type the transcript below on Expo Go.',
-    );
-  };
-
-  const canContinue = voiceMessage.trim().length > 0;
-  const recordingState = recording ? 'Recording' : hasRecording ? 'Recorded' : 'No recording';
-
-  const continueToReview = () => {
-    const citizenName = [route.params.firstName.trim(), route.params.lastName.trim()].filter(Boolean).join(' ');
-    const context = [
-      voiceMessage.trim(),
-      route.params.address.trim() ? `Address: ${route.params.address.trim()}` : '',
-      route.params.email.trim() ? `Email: ${route.params.email.trim()}` : '',
-      citizenName ? `Citizen: ${citizenName}` : '',
-      photoUri ? 'Photo attached: yes' : '',
-      fileUri ? `File attached: ${fileName || 'yes'}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    navigation.navigate('Processing', {
-      nativeLanguage: 'English',
-      mockTranscript: context,
-    });
+  const toggleRecording = () => {
+    if (recording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
   };
 
   const addPhoto = async () => {
@@ -271,139 +249,155 @@ export default function RecordScreen({ route, navigation }: Props) {
     setFileStatus('Optional: attach a related file from storage.');
   };
 
+  const canContinue = issueTitle.trim().length > 0 && voiceMessage.trim().length > 0;
+
+  const continueToReview = () => {
+    const context = [
+      voiceMessage.trim(),
+      address.trim() ? `Address: ${address.trim()}` : '',
+      email.trim() ? `Email: ${email.trim()}` : '',
+      fullName.trim() ? `Citizen: ${fullName.trim()}` : '',
+      photoUri ? 'Photo attached: yes' : '',
+      fileUri ? `File attached: ${fileName || 'yes'}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    navigation.navigate('Processing', {
+      nativeLanguage: 'English',
+      mockTranscript: context,
+      issueTitle: issueTitle.trim(),
+    });
+  };
+
   return (
     <SafeAreaView style={styles.page}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.heading}>
-          <View>
-            <Text style={styles.eyebrow}>Active QR: Salzburg city service point</Text>
-            <Text style={styles.title}>Voice memo or written report</Text>
-            <Text style={styles.contextText}>
-              {route.params.address || 'No address provided yet'}
-            </Text>
-          </View>
-          <View style={styles.statusPill}>
-            <View style={[styles.statusDot, recording && styles.statusDotRecording]} />
-            <Text style={styles.statusText}>
-              {recordingState} | {formatTime(seconds)}
-            </Text>
-          </View>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <Pressable style={styles.backButton} onPress={() => navigation.goBack()} accessibilityLabel="Back">
+          <MaterialCommunityIcons name="arrow-left" size={20} color={citizenGreen} />
+        </Pressable>
+
+        <View style={styles.brandBlock}>
+          <Text style={styles.brandText}>
+            <Text style={styles.brandAccent}>Salz</Text>Citizen
+          </Text>
+          <Text style={styles.brandSubtext}>Salzburg. We listen</Text>
         </View>
 
-        <View style={styles.panel}>
-          <View style={styles.recorderBox}>
-            <Text style={styles.speechStatus}>{speechStatus}</Text>
-            <AnimatedWaveform active={recording} />
-            <View style={styles.controls}>
-              <Pressable
-                style={[styles.primaryButton, recording && styles.buttonDisabled]}
-                disabled={recording}
-                onPress={startRecording}
-              >
-                <MaterialCommunityIcons name="microphone" size={18} color="#fff" />
-                <Text style={styles.primaryButtonText}>Start</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.dangerButton, !recording && styles.buttonDisabled]}
-                disabled={!recording}
-                onPress={stopRecording}
-              >
-                <MaterialCommunityIcons name="stop" size={18} color="#fff" />
-                <Text style={styles.primaryButtonText}>Stop</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.iconButton, (!hasRecording || recording) && styles.buttonDisabled]}
-                disabled={!hasRecording || recording}
-                onPress={discardRecording}
-              >
-                <MaterialCommunityIcons name="restart" size={21} color={theme.colors.text} />
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.transcriptBox}>
-            <Text style={styles.inputLabel}>{speechSupported ? 'Recognized voice message or written report' : 'Written report'}</Text>
+        <View style={styles.form}>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.inputLabel}>Full Name</Text>
             <TextInput
-              style={[styles.input, styles.transcriptInput]}
-              value={voiceMessage}
-              onChangeText={setVoiceMessage}
-              multiline
-              placeholder="Speak, or write the report text here"
-              placeholderTextColor={theme.colors.muted}
-              textAlignVertical="top"
+              style={styles.input}
+              value={fullName}
+              onChangeText={setFullName}
+              placeholder="Jane Smith"
+              placeholderTextColor="#8c8c8c"
             />
           </View>
 
-          <View style={styles.evidenceBox}>
-            <View style={styles.evidenceHeader}>
-              <View style={styles.attachmentCopy}>
-                <Text style={styles.sectionTitle}>Evidence</Text>
-                <Text style={styles.photoStatus}>Add a photo or file to help the city understand the issue.</Text>
-              </View>
-            </View>
-
-            <View style={styles.photoPreviewCard}>
-              {photoUri ? (
-                <>
-                  <Image source={{ uri: photoUri }} style={styles.photoPreview} />
-                  <View style={styles.attachmentFooter}>
-                    <View>
-                      <Text style={styles.attachmentTitle}>Issue photo attached</Text>
-                      <Text style={styles.photoStatus}>{photoStatus}</Text>
-                    </View>
-                    <Pressable style={styles.removePhotoButton} onPress={removePhoto}>
-                      <Text style={styles.removePhotoText}>Remove</Text>
-                    </Pressable>
-                  </View>
-                </>
-              ) : (
-                <View style={styles.photoPlaceholder}>
-                  <View style={styles.emptyIconCircle}>
-                    <MaterialCommunityIcons name="image-plus" size={28} color={theme.colors.primary} />
-                  </View>
-                  <Text style={styles.photoPlaceholderText}>No photo added yet</Text>
-                  <Text style={styles.photoPlaceholderHint}>Take a picture or choose one from storage.</Text>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.actionGrid}>
-              <Pressable style={styles.actionTile} onPress={takePhoto}>
-                <MaterialCommunityIcons name="camera-outline" size={23} color={theme.colors.primary} />
-                <Text style={styles.actionTitle}>{photoUri ? 'Retake' : 'Camera'}</Text>
-              </Pressable>
-              <Pressable style={styles.actionTile} onPress={addPhoto}>
-                <MaterialCommunityIcons name="image-multiple-outline" size={23} color={theme.colors.primary} />
-                <Text style={styles.actionTitle}>Photos</Text>
-              </Pressable>
-              <Pressable style={styles.actionTile} onPress={addFile}>
-                <MaterialCommunityIcons name="file-upload-outline" size={23} color={theme.colors.primary} />
-                <Text style={styles.actionTitle}>Files</Text>
-              </Pressable>
-            </View>
-
-            {fileUri ? (
-              <View style={styles.fileCard}>
-                <View style={styles.fileIconCircle}>
-                  <MaterialCommunityIcons name="file-document-outline" size={22} color={theme.colors.primary} />
-                </View>
-                <View style={styles.fileTextBlock}>
-                  <Text style={styles.fileName} numberOfLines={1}>
-                    {fileName}
-                  </Text>
-                  <Text style={styles.fileMeta}>{fileStatus}</Text>
-                </View>
-                <Pressable style={styles.removeInlineButton} onPress={removeFile}>
-                  <Text style={styles.removePhotoText}>Remove</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <Text style={styles.attachmentHint}>{fileStatus}</Text>
-            )}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.inputLabel}>Email</Text>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="jane@example.com"
+              placeholderTextColor="#8c8c8c"
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
           </View>
 
-          <Pressable style={[styles.submitButton, !canContinue && styles.buttonDisabled]} disabled={!canContinue} onPress={continueToReview}>
-            <Text style={styles.submitButtonText}>Continue to review</Text>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.inputLabel}>Location</Text>
+            <View style={styles.locationField}>
+              <TextInput
+                style={styles.locationInput}
+                value={address}
+                onChangeText={setAddress}
+                placeholder="Current location..."
+                placeholderTextColor="#8c8c8c"
+              />
+              <Pressable style={styles.blackIconButton} accessibilityLabel="Use current location">
+                <MaterialCommunityIcons name="crosshairs-gps" size={15} color="#f6f5f5" />
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <View style={styles.labelRow}>
+              <Text style={styles.inputLabel}>Issue title</Text>
+              <Text style={styles.counterText}>{issueTitle.length}/50</Text>
+            </View>
+            <TextInput
+              style={styles.input}
+              value={issueTitle}
+              onChangeText={setIssueTitle}
+              placeholder="Short title for the issue"
+              placeholderTextColor="#8c8c8c"
+              maxLength={50}
+              returnKeyType="next"
+            />
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.inputLabel}>Tell us about your issue</Text>
+            <View style={styles.issueField}>
+              <TextInput
+                style={styles.issueInput}
+                value={voiceMessage}
+                onChangeText={setVoiceMessage}
+                multiline
+                placeholder="Describe the issue...."
+                placeholderTextColor="#8c8c8c"
+                textAlignVertical="top"
+              />
+              <View style={styles.issueActions}>
+                <Pressable
+                  style={[styles.blackIconButton, recording && styles.recordingButton]}
+                  onPress={toggleRecording}
+                  accessibilityLabel={recording ? 'Stop voice memo' : 'Record voice memo'}
+                >
+                  <MaterialCommunityIcons name={recording ? 'stop' : 'microphone'} size={15} color="#f6f5f5" />
+                </Pressable>
+                <Pressable style={styles.blackIconButton} onPress={takePhoto} accessibilityLabel="Take photo">
+                  <MaterialCommunityIcons name="camera-outline" size={15} color="#f6f5f5" />
+                </Pressable>
+                <Pressable style={styles.blackIconButton} onPress={addPhoto} accessibilityLabel="Choose photo">
+                  <MaterialCommunityIcons name="image-outline" size={15} color="#f6f5f5" />
+                </Pressable>
+                <Pressable style={styles.blackIconButton} onPress={addFile} accessibilityLabel="Attach file">
+                  <MaterialCommunityIcons name="paperclip" size={15} color="#f6f5f5" />
+                </Pressable>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.supportBlock}>
+            <Text style={styles.supportText}>Or tap the mic to speak.</Text>
+            <Text style={styles.supportText}>We support all languages.</Text>
+            <Text style={styles.statusText}>
+              {recording ? `Recording ${formatTime(seconds)}` : hasRecording ? 'Voice memo ready.' : speechStatus}
+            </Text>
+            <Pressable disabled={!photoUri} onPress={photoUri ? removePhoto : undefined}>
+              <Text style={[styles.attachmentText, photoUri && styles.attachmentTextActive]}>
+                {photoUri ? 'Photo attached. Tap to remove.' : photoStatus}
+              </Text>
+            </Pressable>
+            <Pressable disabled={!fileUri} onPress={fileUri ? removeFile : undefined}>
+              <Text style={[styles.attachmentText, fileUri && styles.attachmentTextActive]}>
+                {fileUri ? `${fileName || 'File attached'}. Tap to remove.` : fileStatus}
+              </Text>
+            </Pressable>
+          </View>
+
+          <Pressable
+            style={[styles.submitButton, !canContinue && styles.buttonDisabled]}
+            disabled={!canContinue}
+            onPress={continueToReview}
+          >
+            <Text style={styles.submitButtonText}>Report Issue</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -414,319 +408,158 @@ export default function RecordScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   page: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#f9f9f9',
   },
   content: {
-    padding: 20,
+    paddingHorizontal: 28,
+    paddingTop: 64,
     paddingBottom: 36,
   },
-  heading: {
-    marginBottom: 18,
-  },
-  eyebrow: {
-    color: theme.colors.primary,
-    fontSize: 12,
-    fontWeight: '800',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-  },
-  title: {
-    color: theme.colors.text,
-    fontSize: 28,
-    fontWeight: '900',
-    lineHeight: 34,
-  },
-  contextText: {
-    color: theme.colors.muted,
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 6,
-  },
-  statusPill: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f0f5f4',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    marginTop: 14,
-  },
-  statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: theme.colors.success,
-    marginRight: 8,
-  },
-  statusDotRecording: {
-    backgroundColor: '#c4513a',
-  },
-  statusText: {
-    color: theme.colors.text,
-    fontWeight: '800',
-  },
-  panel: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: 18,
-    shadowColor: theme.colors.shadow,
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.1,
-    shadowRadius: 24,
-    elevation: 3,
-  },
-  inputLabel: {
-    color: theme.colors.muted,
-    fontSize: 13,
-    fontWeight: '800',
-    marginBottom: 7,
-  },
-  input: {
-    minHeight: 44,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-    color: theme.colors.text,
-    fontSize: 15,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  recorderBox: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: '#fbfcfb',
-    padding: 16,
-    marginBottom: 14,
-  },
-  speechStatus: {
-    color: theme.colors.muted,
-    fontSize: 14,
-    fontWeight: '700',
-    lineHeight: 20,
-  },
-  controls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 20,
-  },
-  primaryButton: {
-    minHeight: 44,
-    borderRadius: 8,
-    backgroundColor: '#047d76',
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dangerButton: {
-    minHeight: 44,
-    borderRadius: 8,
-    backgroundColor: '#c4513a',
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surface,
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '800',
-    marginLeft: 7,
-  },
-  transcriptBox: {
-    marginBottom: 16,
-  },
-  transcriptInput: {
-    minHeight: 96,
-  },
-  evidenceBox: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: '#fbfcfb',
-    padding: 16,
-    marginBottom: 16,
-  },
-  evidenceHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 14,
-  },
-  attachmentCopy: {
-    flex: 1,
-  },
-  sectionTitle: {
-    color: theme.colors.text,
-    fontSize: 18,
-    fontWeight: '900',
-    marginBottom: 4,
-  },
-  photoStatus: {
-    color: theme.colors.muted,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  removePhotoButton: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: theme.colors.surface,
-  },
-  removePhotoText: {
-    color: theme.colors.danger,
-    fontWeight: '900',
-    fontSize: 13,
-  },
-  photoPreviewCard: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  photoPlaceholder: {
-    minHeight: 152,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 18,
-  },
-  emptyIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(4, 125, 118, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  photoPlaceholderText: {
-    color: theme.colors.primary,
-    fontWeight: '900',
-    marginBottom: 4,
-  },
-  photoPlaceholderHint: {
-    color: theme.colors.muted,
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  attachmentFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    padding: 12,
-  },
-  attachmentTitle: {
-    color: theme.colors.text,
-    fontSize: 14,
-    fontWeight: '900',
-    marginBottom: 2,
-  },
-  fileCard: {
-    minHeight: 68,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    marginTop: 12,
-  },
-  fileIconCircle: {
+  backButton: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(4, 125, 118, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginBottom: 8,
   },
-  fileTextBlock: {
-    flex: 1,
+  brandBlock: {
+    alignItems: 'center',
+    marginBottom: 54,
   },
-  fileName: {
-    color: theme.colors.text,
+  brandText: {
+    color: '#000',
+    fontSize: 25,
+    fontWeight: '800',
+  },
+  brandAccent: {
+    color: brandRed,
+  },
+  brandSubtext: {
+    color: '#d3d1d1',
+    fontSize: 12,
+    marginTop: 5,
+  },
+  form: {
+    gap: 13,
+  },
+  fieldGroup: {
+    gap: 9,
+  },
+  inputLabel: {
+    color: '#000',
     fontSize: 15,
-    fontWeight: '900',
+    fontWeight: '600',
   },
-  fileMeta: {
-    color: theme.colors.muted,
-    fontSize: 13,
-    marginTop: 3,
-  },
-  photoPreview: {
-    width: '100%',
-    height: 180,
-    backgroundColor: theme.colors.border,
-  },
-  actionGrid: {
+  labelRow: {
     flexDirection: 'row',
-    gap: 10,
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  actionTile: {
-    flex: 1,
-    minHeight: 74,
-    borderRadius: 8,
+  counterText: {
+    color: '#8c8c8c',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  input: {
+    height: 38,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
+    borderColor: '#8b7f7f',
+    backgroundColor: '#fff',
+    color: '#111',
+    fontSize: 15,
+    paddingHorizontal: 24,
+  },
+  locationField: {
+    height: 38,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#8b7f7f',
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 24,
+    paddingRight: 6,
+  },
+  locationInput: {
+    flex: 1,
+    color: '#111',
+    fontSize: 15,
+  },
+  blackIconButton: {
+    width: 26,
+    height: 26,
+    borderRadius: 15,
+    backgroundColor: '#0e0b0b',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  actionTitle: {
-    color: theme.colors.text,
-    fontWeight: '900',
-    marginTop: 6,
+  recordingButton: {
+    backgroundColor: brandRed,
   },
-  removeInlineButton: {
-    borderRadius: 8,
+  issueField: {
+    minHeight: 99,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginLeft: 10,
+    borderColor: '#8b7f7f',
+    backgroundColor: '#fff',
+    paddingHorizontal: 22,
+    paddingTop: 12,
+    paddingBottom: 40,
+    position: 'relative',
   },
-  attachmentHint: {
-    color: theme.colors.muted,
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 10,
+  issueInput: {
+    minHeight: 48,
+    color: '#111',
+    fontSize: 15,
+    lineHeight: 21,
+    padding: 0,
+  },
+  issueActions: {
+    position: 'absolute',
+    right: 14,
+    bottom: 8,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  supportBlock: {
+    marginTop: 19,
+    marginBottom: 12,
+  },
+  supportText: {
+    color: '#8c8c8c',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '300',
+  },
+  statusText: {
+    color: '#8c8c8c',
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 8,
+  },
+  attachmentText: {
+    color: '#8c8c8c',
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  attachmentTextActive: {
+    color: citizenGreen,
+    fontWeight: '700',
   },
   submitButton: {
-    minHeight: 48,
-    borderRadius: 8,
-    backgroundColor: '#047d76',
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: brandRed,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 18,
   },
   submitButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
+    color: '#fdfbfb',
+    fontSize: 15,
+    fontWeight: '600',
   },
   buttonDisabled: {
     opacity: 0.55,

@@ -9,6 +9,7 @@ export type RootStackParamList = {
   Processing: {
     nativeLanguage: string;
     mockTranscript: string;
+    issueTitle: string;
   };
   Success: {
     citizenMessage: string;
@@ -18,7 +19,8 @@ export type RootStackParamList = {
     department: string;
     nativeLanguage: string;
   };
-  Tracking: undefined;
+  Tracking: { reportId?: string } | undefined;
+  History: undefined;
   AuthorityDashboard: undefined;
 };
 

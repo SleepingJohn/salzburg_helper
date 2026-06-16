@@ -8,6 +8,7 @@ import RecordScreen from './src/screens/RecordScreen';
 import ProcessingScreen from './src/screens/ProcessingScreen';
 import SuccessScreen from './src/screens/SuccessScreen';
 import TrackingScreen from './src/screens/TrackingScreen';
+import HistoryScreen from './src/screens/HistoryScreen';
 import AuthorityDashboardScreen from './src/screens/AuthorityDashboardScreen';
 import theme from './src/theme';
 import { RootStackParamList } from './src/types';
@@ -24,6 +25,7 @@ export default function App() {
           <Stack.Screen name="Processing" component={ProcessingScreen} />
           <Stack.Screen name="Success" component={SuccessScreen} />
           <Stack.Screen name="Tracking" component={TrackingScreen} />
+          <Stack.Screen name="History" component={HistoryScreen} />
           <Stack.Screen name="AuthorityDashboard" component={AuthorityDashboardScreen} />
         </Stack.Navigator>
       </NavigationContainer>

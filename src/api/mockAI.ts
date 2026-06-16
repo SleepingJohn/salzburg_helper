@@ -78,14 +78,11 @@ export async function sendCitizenConfirmation(_summary: ReportSummary) {
 }
 
 export async function fetchTrackingStatus(): Promise<TrackingStatus[]> {
-  return new Promise(resolve => {
-    setTimeout(() => {
-      resolve([
-        { label: 'Received', completed: true, description: 'Your report has been registered.', timestamp: 'Today 10:42' },
-        { label: 'Assigned', completed: true, description: 'Public Cleaning Services has been notified.', timestamp: 'Today 10:44' },
-        { label: 'In Progress', completed: false, description: 'Cleanup is scheduled with the next city route.', timestamp: 'Pending' },
-        { label: 'Completed', completed: false, description: 'The report will close after field confirmation.', timestamp: 'Pending' },
-      ]);
-    }, 600);
-  });
+  return wait(
+    [
+      { label: 'Received', completed: true, description: 'Your report has been registered.', timestamp: 'Today 10:42' },
+      { label: 'Resolved', completed: false, description: 'The report will close when the authority marks it resolved.', timestamp: 'Pending' },
+    ],
+    600,
+  );
 }
