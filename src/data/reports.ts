@@ -1,4 +1,26 @@
-export type ReportStatus = 'received' | 'resolved' | 'rejected';
+export type ReportStatus =
+  | 'received'
+  | 'in_review'
+  | 'forwarded'
+  | 'in_progress'
+  | 'needs_more_information'
+  | 'resolved'
+  | 'rejected';
+
+export type ConversationAttachment = {
+  name: string;
+  type: 'image' | 'document';
+  uri?: string;
+};
+
+export type ConversationMessage = {
+  id: string;
+  sender: 'authority' | 'citizen';
+  message: string;
+  createdAt: string;
+  status?: ReportStatus;
+  attachments?: ConversationAttachment[];
+};
 
 export type CitizenReport = {
   id: string;
@@ -16,17 +38,16 @@ export type CitizenReport = {
   citizenEmail: string;
   citizenMessage: string;
   translatedMessage: string;
-  internalComment: string;
-  publicUpdates: {
-    id: string;
-    message: string;
-    createdAt: string;
-  }[];
+  publicUpdates: ConversationMessage[];
   attachments: string[];
 };
 
 export const statusLabels: Record<ReportStatus, string> = {
   received: 'Received',
+  in_review: 'In review',
+  forwarded: 'Forwarded',
+  in_progress: 'In progress',
+  needs_more_information: 'Needs more information',
   resolved: 'Resolved',
   rejected: 'Rejected',
 };
@@ -47,12 +68,13 @@ const reports: CitizenReport[] = [
     citizenEmail: 'j.halber@gmail.com',
     citizenMessage: 'pls help i lost my show. Address: Salzburg',
     translatedMessage: 'Bitte helfen Sie mir, ich habe meine Show verloren. Adresse: Salzburg',
-    internalComment: 'Check if this needs more citizen detail before forwarding.',
     publicUpdates: [
       {
         id: 'update-00124-1',
-        message: 'Your report has been received and is waiting for assignment.',
+        sender: 'authority',
+        message: 'Your report has been received by Stadt Salzburg.',
         createdAt: 'Today, 10:44',
+        status: 'received',
       },
     ],
     attachments: ['voice memo'],
@@ -73,12 +95,13 @@ const reports: CitizenReport[] = [
     citizenEmail: 'mira@example.com',
     citizenMessage: 'The bin at the bus stop is overflowing and waste is spreading onto the sidewalk.',
     translatedMessage: 'Der Mistkübel an der Haltestelle ist überfüllt und Müll verteilt sich am Gehsteig.',
-    internalComment: 'Bin was emptied and the surrounding sidewalk was cleaned.',
     publicUpdates: [
       {
         id: 'update-00102-1',
+        sender: 'authority',
         message: 'The bin was emptied and the area was cleaned.',
         createdAt: 'Jun 4, 2026',
+        status: 'resolved',
       },
     ],
     attachments: ['photo'],
@@ -99,12 +122,13 @@ const reports: CitizenReport[] = [
     citizenEmail: 'jonas@example.com',
     citizenMessage: 'Street light outside house 12 switches off every few minutes after sunset.',
     translatedMessage: 'Die Straßenlampe vor Haus 12 schaltet sich nach Sonnenuntergang alle paar Minuten aus.',
-    internalComment: 'Lamp unit was inspected and the faulty connector was replaced.',
     publicUpdates: [
       {
         id: 'update-00094-1',
+        sender: 'authority',
         message: 'The faulty connector was replaced by Public Lighting.',
         createdAt: 'May 27, 2026',
+        status: 'resolved',
       },
     ],
     attachments: [],
@@ -125,12 +149,13 @@ const reports: CitizenReport[] = [
     citizenEmail: 'anna@example.com',
     citizenMessage: 'A paving stone is rocking near the crossing and people keep stepping around it.',
     translatedMessage: 'Ein Pflasterstein wackelt nahe der Kreuzung und Menschen weichen ihm aus.',
-    internalComment: 'Paving stone was reset and the surrounding surface was secured.',
     publicUpdates: [
       {
         id: 'update-00081-1',
+        sender: 'authority',
         message: 'The paving stone was reset and the area is secured.',
         createdAt: 'May 13, 2026',
+        status: 'resolved',
       },
     ],
     attachments: ['photo'],
@@ -141,7 +166,7 @@ const reports: CitizenReport[] = [
     issue: 'Transport',
     location: 'Elisabethkai',
     department: 'Traffic Management',
-    status: 'received',
+    status: 'in_review',
     priority: 'high',
     confidence: 89,
     createdAt: 'Jun 12, 2026',
@@ -150,12 +175,13 @@ const reports: CitizenReport[] = [
     citizenEmail: 'david@example.com',
     citizenMessage: 'Temporary sign forces cyclists into car traffic during morning rush.',
     translatedMessage: 'Ein temporäres Schild zwingt Radfahrende im Morgenverkehr in den Autoverkehr.',
-    internalComment: 'Field crew scheduled to move signage.',
     publicUpdates: [
       {
         id: 'update-00076-1',
-        message: 'Your report has been received and is waiting for assignment.',
+        sender: 'authority',
+        message: 'Traffic Management is reviewing the report and checking the location.',
         createdAt: 'Today, 09:15',
+        status: 'in_review',
       },
     ],
     attachments: ['photo'],
@@ -177,7 +203,10 @@ export function listReports() {
   return reports.map(report => ({
     ...report,
     attachments: [...report.attachments],
-    publicUpdates: report.publicUpdates.map(update => ({ ...update })),
+    publicUpdates: report.publicUpdates.map(update => ({
+      ...update,
+      attachments: update.attachments?.map(attachment => ({ ...attachment })),
+    })),
   }));
 }
 
@@ -187,7 +216,10 @@ export function getReportById(id: string) {
     ? {
         ...report,
         attachments: [...report.attachments],
-        publicUpdates: report.publicUpdates.map(update => ({ ...update })),
+        publicUpdates: report.publicUpdates.map(update => ({
+          ...update,
+          attachments: update.attachments?.map(attachment => ({ ...attachment })),
+        })),
       }
     : undefined;
 }
@@ -197,7 +229,10 @@ export function getCurrentReport() {
   return {
     ...report,
     attachments: [...report.attachments],
-    publicUpdates: report.publicUpdates.map(update => ({ ...update })),
+    publicUpdates: report.publicUpdates.map(update => ({
+      ...update,
+      attachments: update.attachments?.map(attachment => ({ ...attachment })),
+    })),
   };
 }
 
@@ -209,20 +244,61 @@ export function updateReport(id: string, patch: Partial<CitizenReport>) {
   }
 
   const nextStatus = patch.status;
+  const shouldClearResolvedAt = Boolean(nextStatus && nextStatus !== 'resolved');
+
   reports[index] = {
     ...reports[index],
     ...patch,
     updatedAt: patch.updatedAt ?? 'Just now',
-    resolvedAt: nextStatus === 'resolved' ? patch.resolvedAt ?? 'Just now' : patch.resolvedAt ?? reports[index].resolvedAt,
+    resolvedAt: nextStatus === 'resolved'
+      ? patch.resolvedAt ?? 'Just now'
+      : shouldClearResolvedAt
+        ? undefined
+        : patch.resolvedAt ?? reports[index].resolvedAt,
   };
   emitReportsChanged();
 }
 
-export function addReportUpdate(id: string, message: string) {
+export function addReportUpdate(
+  id: string,
+  message: string,
+  status: ReportStatus,
+  attachments: ConversationAttachment[] = [],
+) {
   const index = reports.findIndex(report => report.id === id);
   const trimmedMessage = message.trim();
 
   if (index === -1 || !trimmedMessage) {
+    return;
+  }
+
+  const shouldClearResolvedAt = status !== 'resolved';
+
+  reports[index] = {
+    ...reports[index],
+    status,
+    updatedAt: 'Just now',
+    resolvedAt: status === 'resolved' ? 'Just now' : shouldClearResolvedAt ? undefined : reports[index].resolvedAt,
+    publicUpdates: [
+      {
+        id: `update-${id}-${Date.now()}`,
+        sender: 'authority',
+        message: trimmedMessage,
+        createdAt: 'Just now',
+        status,
+        attachments: attachments.map(attachment => ({ ...attachment })),
+      },
+      ...reports[index].publicUpdates,
+    ],
+  };
+  emitReportsChanged();
+}
+
+export function addCitizenReply(id: string, message: string, attachments: ConversationAttachment[] = []) {
+  const index = reports.findIndex(report => report.id === id);
+  const trimmedMessage = message.trim();
+
+  if (index === -1 || (!trimmedMessage && attachments.length === 0)) {
     return;
   }
 
@@ -231,9 +307,11 @@ export function addReportUpdate(id: string, message: string) {
     updatedAt: 'Just now',
     publicUpdates: [
       {
-        id: `update-${id}-${Date.now()}`,
-        message: trimmedMessage,
+        id: `reply-${id}-${Date.now()}`,
+        sender: 'citizen',
+        message: trimmedMessage || 'Attachment added.',
         createdAt: 'Just now',
+        attachments: attachments.map(attachment => ({ ...attachment })),
       },
       ...reports[index].publicUpdates,
     ],
@@ -247,6 +325,9 @@ export function getResolvedReports() {
 
 export function getTrackingSteps(report: CitizenReport) {
   const isClosed = report.status === 'resolved' || report.status === 'rejected';
+  const hasAuthorityUpdate = report.status !== 'received';
+  const currentStatusLabel =
+    report.status === 'received' ? 'Authority review' : isClosed ? 'Final decision' : statusLabels[report.status];
 
   return [
     {
@@ -254,6 +335,12 @@ export function getTrackingSteps(report: CitizenReport) {
       completed: true,
       description: 'Your report has been registered.',
       timestamp: report.createdAt,
+    },
+    {
+      label: currentStatusLabel,
+      completed: hasAuthorityUpdate,
+      description: `${report.department} is handling the report.`,
+      timestamp: hasAuthorityUpdate ? report.updatedAt : 'Pending',
     },
     {
       label: report.status === 'rejected' ? 'Closed' : 'Resolved',

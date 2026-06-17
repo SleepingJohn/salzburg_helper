@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import { Linking, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
+  addCitizenReply,
   CitizenReport,
+  ConversationAttachment,
   getCurrentReport,
   getReportById,
   getTrackingSteps,
@@ -26,6 +30,11 @@ export default function TrackingScreen({ route, navigation }: Props) {
     listReports().filter(item => item.status !== 'resolved' && item.status !== 'rejected'),
   );
   const [selectorOpen, setSelectorOpen] = useState(false);
+  const [replyDraft, setReplyDraft] = useState('');
+  const [replyAttachments, setReplyAttachments] = useState<ConversationAttachment[]>([]);
+  const [replyMessage, setReplyMessage] = useState('');
+  const [attachmentPreview, setAttachmentPreview] = useState<ConversationAttachment | null>(null);
+  const [conversationCollapsed, setConversationCollapsed] = useState(false);
 
   useEffect(() => {
     setReport(getVisibleReport());
@@ -89,6 +98,9 @@ export default function TrackingScreen({ route, navigation }: Props) {
                       onPress={() => {
                         setReport(openReport);
                         setSelectorOpen(false);
+                        setReplyDraft('');
+                        setReplyAttachments([]);
+                        setReplyMessage('');
                       }}
                     >
                       <View style={styles.selectorTextBlock}>
@@ -163,24 +175,157 @@ export default function TrackingScreen({ route, navigation }: Props) {
         </View>
 
         <View style={styles.updatesCard}>
-          <Text style={styles.sectionTitle}>Updates from the city</Text>
-          <View style={styles.updateList}>
-            {report.publicUpdates.length ? (
-              report.publicUpdates.map(update => (
-                <View key={update.id} style={styles.updateItem}>
-                  <View style={styles.updateIcon}>
-                    <MaterialCommunityIcons name="message-text-outline" size={16} color={citizenGreen} />
-                  </View>
-                  <View style={styles.updateCopy}>
-                    <Text style={styles.updateDate}>{update.createdAt}</Text>
-                    <Text style={styles.updateText}>{update.message}</Text>
-                  </View>
+          <Pressable
+            style={styles.collapsibleHeader}
+            onPress={() => setConversationCollapsed(current => !current)}
+          >
+            <Text style={styles.sectionTitleInline}>Updates from the city</Text>
+            <MaterialCommunityIcons
+              name={conversationCollapsed ? 'chevron-down' : 'chevron-up'}
+              size={22}
+              color={citizenGreen}
+            />
+          </Pressable>
+          {!conversationCollapsed ? (
+            <>
+              <View style={styles.updateList}>
+                {report.publicUpdates.length ? (
+                  report.publicUpdates.map(update => (
+                    <View
+                      key={update.id}
+                      style={[styles.updateItem, update.sender === 'citizen' && styles.updateItemCitizen]}
+                    >
+                      <View style={[styles.updateIcon, update.sender === 'citizen' && styles.updateIconCitizen]}>
+                        <MaterialCommunityIcons
+                          name={update.sender === 'citizen' ? 'account-outline' : 'city-variant-outline'}
+                          size={16}
+                          color={citizenGreen}
+                        />
+                      </View>
+                      <View style={styles.updateCopy}>
+                        <View style={styles.updateHeader}>
+                          <Text style={styles.updateDate}>
+                            {update.sender === 'citizen' ? 'You' : 'Stadt Salzburg'} | {update.createdAt}
+                          </Text>
+                          {update.status ? <Text style={styles.updateStatus}>{statusLabels[update.status]}</Text> : null}
+                        </View>
+                        <Text style={styles.updateText}>{update.message}</Text>
+                        {update.attachments?.length ? (
+                          <View style={styles.replyAttachmentList}>
+                            {update.attachments.map((attachment, index) => (
+                              <Pressable
+                                key={`${update.id}-${attachment.name}-${index}`}
+                                style={styles.replyAttachmentPill}
+                                onPress={() => setAttachmentPreview(attachment)}
+                              >
+                                <MaterialCommunityIcons
+                                  name={attachment.type === 'image' ? 'image-outline' : 'file-document-outline'}
+                                  size={14}
+                                  color={citizenGreen}
+                                />
+                                <Text style={styles.replyAttachmentText}>{attachment.name}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        ) : null}
+                      </View>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.emptyUpdateText}>No city updates yet.</Text>
+                )}
+              </View>
+
+              {report.status !== 'resolved' && report.status !== 'rejected' ? (
+                <View style={styles.replyBox}>
+              <Text style={styles.replyLabel}>Reply to the city</Text>
+              <TextInput
+                style={styles.replyInput}
+                value={replyDraft}
+                onChangeText={setReplyDraft}
+                placeholder="Write a message"
+                placeholderTextColor="#8c8c8c"
+                multiline
+              />
+              {replyAttachments.length ? (
+                <View style={styles.replyAttachmentList}>
+                  {replyAttachments.map((attachment, index) => (
+                    <Pressable
+                      key={`${attachment.name}-${index}`}
+                      style={styles.replyAttachmentPill}
+                      onPress={() => setAttachmentPreview(attachment)}
+                    >
+                      <MaterialCommunityIcons
+                        name={attachment.type === 'image' ? 'image-outline' : 'file-document-outline'}
+                        size={14}
+                        color={citizenGreen}
+                      />
+                      <Text style={styles.replyAttachmentText}>{attachment.name}</Text>
+                    </Pressable>
+                  ))}
                 </View>
-              ))
-            ) : (
-              <Text style={styles.emptyUpdateText}>No city updates yet.</Text>
-            )}
-          </View>
+              ) : null}
+              <View style={styles.replyActions}>
+                <Pressable style={styles.replyToolButton} onPress={async () => {
+                  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+                  if (!permission.granted) {
+                    setReplyMessage('Photo permission was not granted.');
+                    return;
+                  }
+
+                  const result = await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes: ['images'],
+                    quality: 0.8,
+                  });
+
+                  if (!result.canceled && result.assets[0]) {
+                    setReplyAttachments(current => [
+                      ...current,
+                      { name: result.assets[0].fileName ?? 'photo attachment', type: 'image', uri: result.assets[0].uri },
+                    ]);
+                    setReplyMessage('Image attached.');
+                  }
+                }}>
+                  <MaterialCommunityIcons name="image-plus-outline" size={17} color={citizenGreen} />
+                  <Text style={styles.replyToolText}>Image</Text>
+                </Pressable>
+                <Pressable style={styles.replyToolButton} onPress={async () => {
+                  const result = await DocumentPicker.getDocumentAsync({
+                    copyToCacheDirectory: true,
+                  });
+
+                  if (!result.canceled && result.assets[0]) {
+                    setReplyAttachments(current => [
+                      ...current,
+                      { name: result.assets[0].name, type: 'document', uri: result.assets[0].uri },
+                    ]);
+                    setReplyMessage('Document attached.');
+                  }
+                }}>
+                  <MaterialCommunityIcons name="file-upload-outline" size={17} color={citizenGreen} />
+                  <Text style={styles.replyToolText}>Document</Text>
+                </Pressable>
+                <Pressable style={styles.replySendButton} onPress={() => {
+                  if (!replyDraft.trim() && replyAttachments.length === 0) {
+                    setReplyMessage('Write a message or attach a file before sending.');
+                    return;
+                  }
+
+                  addCitizenReply(report.id, replyDraft, replyAttachments);
+                  setReplyDraft('');
+                  setReplyAttachments([]);
+                  setReplyMessage('Reply sent to Stadt Salzburg.');
+                }}>
+                  <MaterialCommunityIcons name="send-outline" size={17} color="#fff" />
+                  <Text style={styles.replySendText}>Send</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.replyMessage}>{replyMessage}</Text>
+                </View>
+              ) : null}
+            </>
+          ) : null}
         </View>
 
         <View style={styles.actions}>
@@ -189,6 +334,54 @@ export default function TrackingScreen({ route, navigation }: Props) {
           </Pressable>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={Boolean(attachmentPreview)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAttachmentPreview(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.attachmentPreviewHero}>
+              <MaterialCommunityIcons
+                name={attachmentPreview?.type === 'image' ? 'image-outline' : 'file-document-outline'}
+                size={44}
+                color={citizenGreen}
+              />
+            </View>
+            <Text style={styles.modalTitle}>{attachmentPreview?.name ?? 'Attachment'}</Text>
+            <Text style={styles.previewText}>
+              {attachmentPreview?.type === 'image'
+                ? 'Image quickview placeholder. In production this would render the uploaded image.'
+                : 'Document quickview placeholder. In production this would render a preview or file details.'}
+            </Text>
+            <View style={styles.modalActions}>
+              <Pressable
+                style={styles.modalSecondary}
+                onPress={async () => {
+                  if (attachmentPreview?.uri) {
+                    try {
+                      await Linking.openURL(attachmentPreview.uri);
+                    } catch {
+                      setReplyMessage(`Download ready for ${attachmentPreview.name}.`);
+                    }
+                    return;
+                  }
+
+                  setReplyMessage(`Download ready for ${attachmentPreview?.name ?? 'attachment'}.`);
+                }}
+              >
+                <MaterialCommunityIcons name="download-outline" size={17} color="#000" />
+                <Text style={styles.modalSecondaryText}>Download</Text>
+              </Pressable>
+              <Pressable style={styles.modalPrimary} onPress={() => setAttachmentPreview(null)}>
+                <Text style={styles.modalPrimaryText}>Close</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -370,6 +563,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 18,
   },
+  sectionTitleInline: {
+    color: '#000',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  collapsibleHeader: {
+    minHeight: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 18,
+  },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -443,6 +649,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 12,
   },
+  updateItemCitizen: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    padding: 10,
+  },
   updateIcon: {
     width: 32,
     height: 32,
@@ -451,20 +662,195 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  updateIconCitizen: {
+    backgroundColor: '#fff',
+  },
   updateCopy: {
     flex: 1,
+  },
+  updateHeader: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 7,
+    marginBottom: 3,
   },
   updateDate: {
     color: '#8c8c8c',
     fontSize: 12,
     fontWeight: '600',
-    marginBottom: 3,
+  },
+  updateStatus: {
+    borderRadius: 12,
+    backgroundColor: '#f0f7ed',
+    color: citizenGreen,
+    fontSize: 11,
+    fontWeight: '700',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   updateText: {
     color: '#000',
     fontSize: 14,
     fontWeight: '500',
     lineHeight: 20,
+  },
+  replyBox: {
+    borderTopWidth: 1,
+    borderTopColor: '#ececec',
+    marginTop: 18,
+    paddingTop: 16,
+  },
+  replyLabel: {
+    color: '#000',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  replyInput: {
+    minHeight: 82,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d7d7d7',
+    color: '#000',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+  },
+  replyAttachmentList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+    marginTop: 8,
+  },
+  replyAttachmentPill: {
+    minHeight: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#d7d7d7',
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+  },
+  replyAttachmentText: {
+    color: citizenGreen,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  replyActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  replyToolButton: {
+    minHeight: 38,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d7d7d7',
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+  },
+  replyToolText: {
+    color: citizenGreen,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  replySendButton: {
+    flexGrow: 1,
+    minHeight: 38,
+    borderRadius: 12,
+    backgroundColor: citizenGreen,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+  },
+  replySendText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  replyMessage: {
+    minHeight: 18,
+    color: '#8c8c8c',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 8,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 22,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    padding: 18,
+  },
+  attachmentPreviewHero: {
+    height: 130,
+    borderRadius: 16,
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  modalTitle: {
+    color: '#000',
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  previewText: {
+    color: '#000',
+    fontSize: 14,
+    lineHeight: 21,
+    marginBottom: 14,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modalSecondary: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#d7d7d7',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  modalSecondaryText: {
+    color: '#000',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  modalPrimary: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 22,
+    backgroundColor: citizenGreen,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalPrimaryText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
   },
   emptyUpdateText: {
     color: '#8c8c8c',

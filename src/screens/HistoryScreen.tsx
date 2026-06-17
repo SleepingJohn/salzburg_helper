@@ -58,7 +58,12 @@ export default function HistoryScreen({ navigation }: Props) {
               </View>
 
               <Text style={styles.issueTitle}>{issue.title}</Text>
-              <Text style={styles.issueSummary}>{issue.internalComment}</Text>
+              <Text style={styles.issueSummary}>
+                {issue.publicUpdates.find(update => update.sender === 'authority')?.message ??
+                  issue.publicUpdates[0]?.message ??
+                  issue.translatedMessage ??
+                  issue.citizenMessage}
+              </Text>
 
               <View style={styles.detailGrid}>
                 <View style={styles.detailItem}>

@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import { Linking, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   addReportUpdate,
   CitizenReport,
+  ConversationAttachment,
   listReports,
   ReportStatus,
   statusLabels,
@@ -21,7 +24,24 @@ const adminBlueSoft = 'rgba(73, 101, 127, 0.1)';
 const citizenGreen = '#2E7F18';
 const dangerRed = '#A20B0B';
 
-const filterOptions: Array<ReportStatus | 'all' | 'open'> = ['open', 'all', 'received', 'resolved'];
+const filterOptions: Array<ReportStatus | 'all' | 'open'> = [
+  'open',
+  'all',
+  'received',
+  'in_review',
+  'forwarded',
+  'in_progress',
+  'needs_more_information',
+  'resolved',
+  'rejected',
+];
+const caseStatusOptions: ReportStatus[] = [
+  'in_review',
+  'forwarded',
+  'in_progress',
+  'needs_more_information',
+  'rejected',
+];
 const departmentOptions = [
   'Citizen Service Center',
   'Public Cleaning Services',
@@ -54,15 +74,18 @@ export default function AuthorityDashboardScreen({ navigation }: Props) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Array<ReportStatus | 'all' | 'open'>[number]>('open');
   const [expandedId, setExpandedId] = useState('');
+  const [collapsedConversationIds, setCollapsedConversationIds] = useState<Record<string, boolean>>({});
   const [message, setMessage] = useState('Ready for updates.');
-  const [updateReportId, setUpdateReportId] = useState('');
   const [resolveReportId, setResolveReportId] = useState('');
-  const [updateDraft, setUpdateDraft] = useState('');
+  const [updateDrafts, setUpdateDrafts] = useState<Record<string, string>>({});
+  const [updateAttachments, setUpdateAttachments] = useState<Record<string, ConversationAttachment[]>>({});
+  const [responseStatusDrafts, setResponseStatusDrafts] = useState<Record<string, ReportStatus | undefined>>({});
   const [departmentDropdownId, setDepartmentDropdownId] = useState('');
   const [attachmentPreview, setAttachmentPreview] = useState<{
     reportId: string;
     attachment: string;
   } | null>(null);
+  const [conversationPreview, setConversationPreview] = useState<ConversationAttachment | null>(null);
 
   useEffect(() => {
     return subscribeReports(() => setReports(listReports()));
@@ -104,7 +127,6 @@ export default function AuthorityDashboardScreen({ navigation }: Props) {
       });
   }, [filter, query, reports]);
 
-  const updateTarget = reports.find(report => report.id === updateReportId);
   const resolveTarget = reports.find(report => report.id === resolveReportId);
   const attachmentReport = reports.find(report => report.id === attachmentPreview?.reportId);
 
@@ -116,32 +138,99 @@ export default function AuthorityDashboardScreen({ navigation }: Props) {
     setMessage(`${report.id} assigned to ${department}.`);
   };
 
-  const updateInternalNote = (report: CitizenReport, internalComment: string) => {
-    updateReport(report.id, { internalComment });
-    setMessage(`Internal note saved for ${report.id}.`);
+  const selectResponseStatus = (report: CitizenReport, status: ReportStatus) => {
+    setResponseStatusDrafts(current => ({
+      ...current,
+      [report.id]: status,
+    }));
   };
 
-  const openUpdateDialog = (report: CitizenReport) => {
-    setUpdateReportId(report.id);
-    setUpdateDraft('');
+  const updateCitizenDraft = (report: CitizenReport, draft: string) => {
+    setUpdateDrafts(current => ({
+      ...current,
+      [report.id]: draft,
+    }));
   };
 
-  const sendPublicUpdate = () => {
-    if (!updateTarget) {
+  const addAuthorityImage = async (report: CitizenReport) => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      setMessage('Photo permission was not granted.');
       return;
     }
 
-    const trimmed = updateDraft.trim();
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setUpdateAttachments(current => ({
+        ...current,
+        [report.id]: [
+          ...(current[report.id] ?? []),
+          {
+            name: result.assets[0].fileName ?? 'city image attachment',
+            type: 'image',
+            uri: result.assets[0].uri,
+          },
+        ],
+      }));
+      setMessage('Image attached to city update.');
+    }
+  };
+
+  const addAuthorityDocument = async (report: CitizenReport) => {
+    const result = await DocumentPicker.getDocumentAsync({
+      copyToCacheDirectory: true,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setUpdateAttachments(current => ({
+        ...current,
+        [report.id]: [
+          ...(current[report.id] ?? []),
+          {
+            name: result.assets[0].name,
+            type: 'document',
+            uri: result.assets[0].uri,
+          },
+        ],
+      }));
+      setMessage('Document attached to city update.');
+    }
+  };
+
+  const sendPublicUpdate = (report: CitizenReport) => {
+    const trimmed = (updateDrafts[report.id] ?? '').trim();
+    const selectedStatus = responseStatusDrafts[report.id];
+    const attachments = updateAttachments[report.id] ?? [];
 
     if (!trimmed) {
       setMessage('Write a citizen update before sending.');
       return;
     }
 
-    addReportUpdate(updateTarget.id, trimmed);
-    setMessage(`Citizen update sent for ${updateTarget.id}.`);
-    setUpdateDraft('');
-    setUpdateReportId('');
+    if (!selectedStatus) {
+      setMessage('Select a case status before sending the update.');
+      return;
+    }
+
+    addReportUpdate(report.id, trimmed, selectedStatus, attachments);
+    setMessage(`Citizen update sent for ${report.id}. Status: ${statusLabels[selectedStatus]}.`);
+    setUpdateDrafts(current => ({
+      ...current,
+      [report.id]: '',
+    }));
+    setUpdateAttachments(current => ({
+      ...current,
+      [report.id]: [],
+    }));
+    setResponseStatusDrafts(current => ({
+      ...current,
+      [report.id]: undefined,
+    }));
   };
 
   const confirmResolve = () => {
@@ -205,6 +294,7 @@ export default function AuthorityDashboardScreen({ navigation }: Props) {
         <View style={styles.reportList}>
           {filteredReports.map(report => {
             const expanded = expandedId === report.id;
+            const conversationCollapsed = collapsedConversationIds[report.id] ?? false;
 
             return (
               <View key={report.id} style={styles.reportCard}>
@@ -332,27 +422,147 @@ export default function AuthorityDashboardScreen({ navigation }: Props) {
 
                     <Text style={styles.reportText}>{report.translatedMessage || report.citizenMessage}</Text>
 
-                    <Text style={styles.inputLabel}>Internal note</Text>
-                    <TextInput
-                      style={styles.noteInput}
-                      value={report.internalComment}
-                      onChangeText={internalComment => updateInternalNote(report, internalComment)}
-                      placeholder="Internal note, not visible to citizen"
-                      placeholderTextColor={theme.colors.muted}
-                      multiline
-                    />
+                    <Pressable
+                      style={styles.collapsibleHeader}
+                      onPress={() =>
+                        setCollapsedConversationIds(current => ({
+                          ...current,
+                          [report.id]: !(current[report.id] ?? false),
+                        }))
+                      }
+                    >
+                      <Text style={styles.inputLabel}>Conversation</Text>
+                      <MaterialCommunityIcons
+                        name={conversationCollapsed ? 'chevron-down' : 'chevron-up'}
+                        size={20}
+                        color={adminBlue}
+                      />
+                    </Pressable>
+                    {!conversationCollapsed ? (
+                      <View style={styles.conversationBlock}>
+                        {report.publicUpdates.length ? (
+                          report.publicUpdates.map(update => (
+                            <View
+                              key={update.id}
+                              style={[
+                                styles.conversationItem,
+                                update.sender === 'citizen' ? styles.conversationItemCitizen : styles.conversationItemAuthority,
+                              ]}
+                            >
+                              <View style={styles.conversationHeader}>
+                                <Text style={styles.conversationSender}>
+                                  {update.sender === 'citizen' ? 'Citizen' : 'City'}
+                                </Text>
+                                <Text style={styles.conversationDate}>{update.createdAt}</Text>
+                              </View>
+                              {update.status ? (
+                                <Text style={styles.conversationStatus}>{statusLabels[update.status]}</Text>
+                              ) : null}
+                              <Text style={styles.conversationText}>{update.message}</Text>
+                              {update.attachments?.length ? (
+                                <View style={styles.conversationAttachmentList}>
+                                  {update.attachments.map((attachment, index) => (
+                                    <Pressable
+                                      key={`${update.id}-${attachment.name}-${index}`}
+                                      style={styles.conversationAttachment}
+                                      onPress={() => setConversationPreview(attachment)}
+                                    >
+                                      <MaterialCommunityIcons
+                                        name={attachment.type === 'image' ? 'image-outline' : 'file-document-outline'}
+                                        size={15}
+                                        color={adminBlue}
+                                      />
+                                      <Text style={styles.conversationAttachmentText}>{attachment.name}</Text>
+                                    </Pressable>
+                                  ))}
+                                </View>
+                              ) : null}
+                            </View>
+                          ))
+                        ) : (
+                          <Text style={styles.noAttachmentsText}>No conversation yet.</Text>
+                        )}
+                      </View>
+                    ) : null}
+
+                    {report.status !== 'resolved' ? (
+                      <>
+                        <Text style={styles.inputLabel}>Status for this update</Text>
+                        <View style={styles.caseStatusGrid}>
+                          {caseStatusOptions.map(status => {
+                            const active = responseStatusDrafts[report.id] === status;
+
+                            return (
+                              <Pressable
+                                key={status}
+                                style={[styles.caseStatusOption, active && styles.caseStatusOptionActive]}
+                                onPress={() => selectResponseStatus(report, status)}
+                              >
+                                <Text style={[styles.caseStatusText, active && styles.caseStatusTextActive]}>
+                                  {statusLabels[status]}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      </>
+                    ) : null}
+
+                    {report.status !== 'resolved' ? (
+                      <>
+                        <Text style={styles.inputLabel}>Citizen update</Text>
+                        <TextInput
+                          style={styles.citizenUpdateInput}
+                          value={updateDrafts[report.id] ?? ''}
+                          onChangeText={draft => updateCitizenDraft(report, draft)}
+                          placeholder="Write a short public update"
+                          placeholderTextColor={theme.colors.muted}
+                          multiline
+                        />
+                        {(updateAttachments[report.id] ?? []).length ? (
+                          <View style={styles.conversationAttachmentList}>
+                            {(updateAttachments[report.id] ?? []).map((attachment, index) => (
+                              <Pressable
+                                key={`${attachment.name}-${index}`}
+                                style={styles.conversationAttachment}
+                                onPress={() => setConversationPreview(attachment)}
+                              >
+                                <MaterialCommunityIcons
+                                  name={attachment.type === 'image' ? 'image-outline' : 'file-document-outline'}
+                                  size={15}
+                                  color={adminBlue}
+                                />
+                                <Text style={styles.conversationAttachmentText}>{attachment.name}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        ) : null}
+                        <View style={styles.attachmentToolRow}>
+                          <Pressable style={styles.attachmentToolButton} onPress={() => addAuthorityImage(report)}>
+                            <MaterialCommunityIcons name="image-plus-outline" size={17} color={adminBlue} />
+                            <Text style={styles.attachmentToolText}>Image</Text>
+                          </Pressable>
+                          <Pressable style={styles.attachmentToolButton} onPress={() => addAuthorityDocument(report)}>
+                            <MaterialCommunityIcons name="file-upload-outline" size={17} color={adminBlue} />
+                            <Text style={styles.attachmentToolText}>Document</Text>
+                          </Pressable>
+                        </View>
+                      </>
+                    ) : null}
 
                     <View style={styles.actions}>
-                      {report.status !== 'resolved' ? (
+                      {report.status !== 'resolved' && report.status !== 'rejected' ? (
                         <Pressable style={styles.primaryAction} onPress={() => setResolveReportId(report.id)}>
                           <MaterialCommunityIcons name="check" size={18} color="#fff" />
                           <Text style={styles.primaryActionText}>Mark resolved</Text>
                         </Pressable>
                       ) : null}
-                      <Pressable style={styles.secondaryAction} onPress={() => openUpdateDialog(report)}>
-                        <MaterialCommunityIcons name="send-outline" size={18} color={adminBlue} />
-                        <Text style={styles.secondaryActionText}>Send update</Text>
-                      </Pressable>
+                      {report.status !== 'resolved' ? (
+                        <Pressable style={styles.secondaryAction} onPress={() => sendPublicUpdate(report)}>
+                          <MaterialCommunityIcons name="send-outline" size={18} color={adminBlue} />
+                          <Text style={styles.secondaryActionText}>Send update</Text>
+                        </Pressable>
+                      ) : null}
                     </View>
                   </View>
                 ) : null}
@@ -375,37 +585,6 @@ export default function AuthorityDashboardScreen({ navigation }: Props) {
               </Pressable>
               <Pressable style={styles.modalPrimary} onPress={confirmResolve}>
                 <Text style={styles.modalPrimaryText}>Confirm</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={Boolean(updateTarget)} transparent animationType="fade" onRequestClose={() => setUpdateReportId('')}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Send update to citizen</Text>
-            <Text style={styles.modalText}>{updateTarget?.id}</Text>
-            <TextInput
-              style={styles.updateInput}
-              value={updateDraft}
-              onChangeText={setUpdateDraft}
-              placeholder="Write a short public update"
-              placeholderTextColor={theme.colors.muted}
-              multiline
-            />
-            <View style={styles.modalActions}>
-              <Pressable
-                style={styles.modalSecondary}
-                onPress={() => {
-                  setUpdateReportId('');
-                  setUpdateDraft('');
-                }}
-              >
-                <Text style={styles.modalSecondaryText}>Cancel</Text>
-              </Pressable>
-              <Pressable style={styles.modalPrimary} onPress={sendPublicUpdate}>
-                <Text style={styles.modalPrimaryText}>Send</Text>
               </Pressable>
             </View>
           </View>
@@ -443,7 +622,62 @@ export default function AuthorityDashboardScreen({ navigation }: Props) {
                   : 'File preview placeholder. In production this would open or download the uploaded file.'}
             </Text>
             <View style={styles.modalActions}>
-              <Pressable style={styles.modalPrimaryWide} onPress={() => setAttachmentPreview(null)}>
+              <Pressable
+                style={styles.modalSecondary}
+                onPress={() => setMessage(`Download ready for ${attachmentPreview?.attachment ?? 'attachment'}.`)}
+              >
+                <MaterialCommunityIcons name="download-outline" size={17} color={theme.colors.text} />
+                <Text style={styles.modalSecondaryText}>Download</Text>
+              </Pressable>
+              <Pressable style={styles.modalPrimary} onPress={() => setAttachmentPreview(null)}>
+                <Text style={styles.modalPrimaryText}>Close</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(conversationPreview)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConversationPreview(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.attachmentPreviewHero}>
+              <MaterialCommunityIcons
+                name={conversationPreview?.type === 'image' ? 'image-outline' : 'file-document-outline'}
+                size={44}
+                color={adminBlue}
+              />
+            </View>
+            <Text style={styles.modalTitle}>{conversationPreview?.name ?? 'Attachment'}</Text>
+            <Text style={styles.previewText}>
+              {conversationPreview?.type === 'image'
+                ? 'Image quickview placeholder. In production this would render the uploaded image.'
+                : 'Document quickview placeholder. In production this would render a preview or file details.'}
+            </Text>
+            <View style={styles.modalActions}>
+              <Pressable
+                style={styles.modalSecondary}
+                onPress={async () => {
+                  if (conversationPreview?.uri) {
+                    try {
+                      await Linking.openURL(conversationPreview.uri);
+                    } catch {
+                      setMessage(`Download ready for ${conversationPreview.name}.`);
+                    }
+                    return;
+                  }
+
+                  setMessage(`Download ready for ${conversationPreview?.name ?? 'attachment'}.`);
+                }}
+              >
+                <MaterialCommunityIcons name="download-outline" size={17} color={theme.colors.text} />
+                <Text style={styles.modalSecondaryText}>Download</Text>
+              </Pressable>
+              <Pressable style={styles.modalPrimary} onPress={() => setConversationPreview(null)}>
                 <Text style={styles.modalPrimaryText}>Close</Text>
               </Pressable>
             </View>
@@ -741,6 +975,14 @@ const styles = StyleSheet.create({
     marginBottom: 7,
     textTransform: 'uppercase',
   },
+  collapsibleHeader: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 7,
+  },
   departmentSelect: {
     minHeight: 42,
     borderRadius: 14,
@@ -795,8 +1037,107 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     marginBottom: 13,
   },
-  noteInput: {
-    minHeight: 68,
+  conversationBlock: {
+    borderRadius: 16,
+    backgroundColor: '#f8fafc',
+    padding: 10,
+    gap: 8,
+    marginBottom: 13,
+  },
+  conversationItem: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 10,
+  },
+  conversationItemAuthority: {
+    backgroundColor: '#fff',
+    borderColor: 'rgba(73, 101, 127, 0.18)',
+  },
+  conversationItemCitizen: {
+    backgroundColor: 'rgba(46, 127, 24, 0.07)',
+    borderColor: 'rgba(46, 127, 24, 0.18)',
+  },
+  conversationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 5,
+  },
+  conversationSender: {
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  conversationDate: {
+    color: theme.colors.muted,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  conversationStatus: {
+    alignSelf: 'flex-start',
+    borderRadius: 12,
+    backgroundColor: adminBlueSoft,
+    color: adminBlue,
+    fontSize: 11,
+    fontWeight: '900',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginBottom: 7,
+  },
+  conversationText: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 19,
+  },
+  conversationAttachmentList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  conversationAttachment: {
+    minHeight: 28,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+  },
+  conversationAttachmentText: {
+    color: adminBlue,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  attachmentToolRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: -5,
+    marginBottom: 13,
+  },
+  attachmentToolButton: {
+    minHeight: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(73, 101, 127, 0.25)',
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+  },
+  attachmentToolText: {
+    color: adminBlue,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  citizenUpdateInput: {
+    minHeight: 76,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -878,15 +1219,33 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 14,
   },
-  updateInput: {
-    minHeight: 100,
-    borderRadius: 16,
+  caseStatusGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+    marginBottom: 13,
+  },
+  caseStatusOption: {
+    minHeight: 36,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    color: theme.colors.text,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 14,
+  },
+  caseStatusOptionActive: {
+    backgroundColor: adminBlue,
+    borderColor: adminBlue,
+  },
+  caseStatusText: {
+    color: theme.colors.muted,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  caseStatusTextActive: {
+    color: '#fff',
   },
   attachmentPreviewHero: {
     height: 130,
@@ -912,8 +1271,10 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     borderColor: theme.colors.border,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
   },
   modalSecondaryText: {
     color: theme.colors.text,
@@ -921,14 +1282,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   modalPrimary: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: 22,
-    backgroundColor: adminBlue,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalPrimaryWide: {
     flex: 1,
     minHeight: 44,
     borderRadius: 22,
