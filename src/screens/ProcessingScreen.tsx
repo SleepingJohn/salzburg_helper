@@ -3,7 +3,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { routeToAuthority, sendCitizenConfirmation, translateToGerman, transcribeVoice } from '../api/mockAI';
-import { updateReport } from '../data/reports';
+import { createCitizenReport } from '../data/reports';
 import { ReportSummary, RootStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Processing'>;
@@ -17,10 +17,24 @@ const steps = [
   { key: 'routing', label: 'Finding City Department' },
 ];
 
+function getCreatedLabel() {
+  const now = new Date();
+  const hours = now.getHours().toString().padStart(2, '0');
+  const minutes = now.getMinutes().toString().padStart(2, '0');
+  return `Today, ${hours}:${minutes}`;
+}
+
 export default function ProcessingScreen({ route, navigation }: Props) {
   const [currentStep, setCurrentStep] = useState(0);
   const [summary, setSummary] = useState<ReportSummary | null>(null);
+  const [translatedMessage, setTranslatedMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const issueTitle = route.params.issueTitle?.trim() || 'Untitled issue';
+  const fullName = route.params.fullName?.trim() || 'Anonymous citizen';
+  const email = route.params.email?.trim() || 'No email provided';
+  const address = route.params.address?.trim();
+  const fileName = route.params.fileName?.trim();
+  const citizenMessage = route.params.citizenMessage.trim();
 
   useEffect(() => {
     let mounted = true;
@@ -36,6 +50,7 @@ export default function ProcessingScreen({ route, navigation }: Props) {
       if (!mounted) {
         return;
       }
+      setTranslatedMessage(translatedMessage);
       setCurrentStep(2);
 
       const result = await routeToAuthority(translatedMessage);
@@ -60,19 +75,50 @@ export default function ProcessingScreen({ route, navigation }: Props) {
 
     setIsSending(true);
     const confirmation = await sendCitizenConfirmation(summary);
-    updateReport('SAL - 2026 - 00124', {
-      title: route.params.issueTitle,
+    const location = address || (summary.location === 'Auto-detected' ? 'Auto-detected by app' : summary.location);
+    const attachments = [
+      route.params.hasPhoto ? 'photo' : '',
+      fileName ? fileName : '',
+      citizenMessage ? 'voice memo' : '',
+    ].filter(Boolean);
+    const createdAt = getCreatedLabel();
+    const reportId = createCitizenReport({
+      title: issueTitle,
       issue: summary.issue,
       department: summary.department,
       status: 'received',
-      location: summary.location === 'Auto-detected' ? 'Faberstrasse 10, 5020 Salzburg' : summary.location,
-      citizenMessage: route.params.mockTranscript,
+      priority: 'medium',
+      confidence: 88,
+      createdAt,
+      updatedAt: createdAt,
+      location,
+      citizenName: fullName,
+      citizenEmail: email,
+      citizenMessage,
+      translatedMessage: translatedMessage || citizenMessage,
+      publicUpdates: [
+        {
+          id: `citizen-${Date.now()}`,
+          sender: 'citizen',
+          message: citizenMessage,
+          createdAt,
+        },
+        {
+          id: `received-${Date.now()}`,
+          sender: 'authority',
+          message: 'Your report has been received by Stadt Salzburg.',
+          createdAt,
+          status: 'received',
+        },
+      ],
+      attachments,
     });
     navigation.replace('Success', {
+      reportId,
       citizenMessage: confirmation.citizenMessage,
       germanMessage: confirmation.germanMessage,
       issue: summary.issue,
-      location: summary.location,
+      location,
       department: summary.department,
       nativeLanguage: route.params.nativeLanguage,
     });
@@ -113,7 +159,7 @@ export default function ProcessingScreen({ route, navigation }: Props) {
 
           <View style={styles.summaryCard}>
             <Text style={styles.summaryTitle}>Report Summary</Text>
-            <Text style={styles.summaryText}>Title: {route.params.issueTitle}</Text>
+            <Text style={styles.summaryText}>Title: {issueTitle}</Text>
             <Text style={styles.summaryText}>Issue: {summary?.issue ?? '...'}</Text>
             <Text style={styles.summaryText}>Location: {summary?.location ?? '...'}</Text>
             <Text style={styles.summaryText}>Department: {summary?.department ?? '...'}</Text>

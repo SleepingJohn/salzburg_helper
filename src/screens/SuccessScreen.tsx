@@ -9,7 +9,7 @@ const brandRed = '#A20B0B';
 const successGreen = '#34C759';
 
 export default function SuccessScreen({ route, navigation }: Props) {
-  const { location } = route.params;
+  const { location, reportId } = route.params;
   const displayLocation = location && location !== 'Auto-detected' ? location : 'Faberstrasse 10\n5020 Salzburg';
 
   return (
@@ -32,7 +32,7 @@ export default function SuccessScreen({ route, navigation }: Props) {
       <View style={styles.details}>
         <View style={styles.detailRow}>
           <Text style={styles.detailLabel}>Reference ID</Text>
-          <Text style={styles.detailValue}>SAL - 2026 - 00124</Text>
+          <Text style={styles.detailValue}>{reportId}</Text>
         </View>
         <View style={styles.detailRowTall}>
           <Text style={styles.detailLabel}>Location</Text>
@@ -41,7 +41,7 @@ export default function SuccessScreen({ route, navigation }: Props) {
       </View>
 
       <View style={styles.actions}>
-        <Pressable style={styles.primaryButton} onPress={() => navigation.navigate('Tracking')}>
+        <Pressable style={styles.primaryButton} onPress={() => navigation.navigate('Tracking', { reportId })}>
           <Text style={styles.primaryButtonText}>View Status</Text>
         </Pressable>
         <Pressable style={styles.primaryButton} onPress={() => navigation.popToTop()}>

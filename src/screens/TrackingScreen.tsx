@@ -8,8 +8,6 @@ import {
   addCitizenReply,
   CitizenReport,
   ConversationAttachment,
-  getCurrentReport,
-  getReportById,
   getTrackingSteps,
   listReports,
   statusLabels,
@@ -24,11 +22,8 @@ const brandRed = '#A20B0B';
 
 export default function TrackingScreen({ route, navigation }: Props) {
   const reportId = route.params?.reportId;
-  const getVisibleReport = () => (reportId ? getReportById(reportId) ?? getCurrentReport() : getCurrentReport());
-  const [report, setReport] = useState<CitizenReport>(getVisibleReport());
-  const [openReports, setOpenReports] = useState(() =>
-    listReports().filter(item => item.status !== 'resolved' && item.status !== 'rejected'),
-  );
+  const [reports, setReports] = useState<CitizenReport[]>(listReports());
+  const [selectedReportId, setSelectedReportId] = useState(reportId ?? '');
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [replyDraft, setReplyDraft] = useState('');
   const [replyAttachments, setReplyAttachments] = useState<ConversationAttachment[]>([]);
@@ -37,12 +32,31 @@ export default function TrackingScreen({ route, navigation }: Props) {
   const [conversationCollapsed, setConversationCollapsed] = useState(false);
 
   useEffect(() => {
-    setReport(getVisibleReport());
-    return subscribeReports(() => {
-      setReport(getVisibleReport());
-      setOpenReports(listReports().filter(item => item.status !== 'resolved' && item.status !== 'rejected'));
-    });
+    setSelectedReportId(reportId ?? '');
   }, [reportId]);
+
+  useEffect(() => subscribeReports(() => setReports(listReports())), []);
+
+  const openReports = reports.filter(item => item.status !== 'resolved' && item.status !== 'rejected');
+  const report =
+    reports.find(item => item.id === selectedReportId) ??
+    openReports[0] ??
+    reports[0];
+  const requestedReportMissing = Boolean(selectedReportId) && !reports.some(item => item.id === selectedReportId);
+
+  if (!report) {
+    return (
+      <SafeAreaView style={styles.page}>
+        <View style={styles.emptyState}>
+          <Text style={styles.title}>No reports yet</Text>
+          <Text style={styles.subtitle}>Create a report first, then its status will appear here.</Text>
+          <Pressable style={styles.primaryButton} onPress={() => navigation.popToTop()}>
+            <Text style={styles.primaryButtonText}>Back to Home</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const statuses = getTrackingSteps(report);
 
@@ -64,6 +78,12 @@ export default function TrackingScreen({ route, navigation }: Props) {
           <Text style={styles.title}>View Status</Text>
           <Text style={styles.subtitle}>Track how your report moves through Stadt Salzburg.</Text>
         </View>
+
+        {requestedReportMissing ? (
+          <View style={styles.noticeCard}>
+            <Text style={styles.noticeText}>That reference was not found. Showing your latest open report instead.</Text>
+          </View>
+        ) : null}
 
         {openReports.length > 1 ? (
           <View style={styles.issueSelector}>
@@ -96,7 +116,7 @@ export default function TrackingScreen({ route, navigation }: Props) {
                       key={openReport.id}
                       style={[styles.selectorOption, active && styles.selectorOptionActive]}
                       onPress={() => {
-                        setReport(openReport);
+                        setSelectedReportId(openReport.id);
                         setSelectorOpen(false);
                         setReplyDraft('');
                         setReplyAttachments([]);
@@ -424,6 +444,12 @@ const styles = StyleSheet.create({
   headerBlock: {
     marginBottom: 22,
   },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    gap: 12,
+  },
   title: {
     color: '#000',
     fontSize: 24,
@@ -444,6 +470,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 14,
     marginBottom: 20,
+  },
+  noticeCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d7d7d7',
+    backgroundColor: '#fff',
+    padding: 14,
+    marginBottom: 20,
+  },
+  noticeText: {
+    color: '#394050',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 19,
   },
   issueSelector: {
     borderRadius: 12,

@@ -52,7 +52,9 @@ export const statusLabels: Record<ReportStatus, string> = {
   rejected: 'Rejected',
 };
 
-const reports: CitizenReport[] = [
+const STORAGE_KEY = 'salzcitizen.reports.v1';
+
+const seedReports: CitizenReport[] = [
   {
     id: 'SAL - 2026 - 00124',
     title: 'General message from citizen',
@@ -188,44 +190,61 @@ const reports: CitizenReport[] = [
   },
 ];
 
+function canUseLocalStorage() {
+  return typeof globalThis.localStorage !== 'undefined';
+}
+
+function readStoredReports() {
+  if (!canUseLocalStorage()) {
+    return undefined;
+  }
+
+  try {
+    const serialized = globalThis.localStorage.getItem(STORAGE_KEY);
+    const parsed = serialized ? JSON.parse(serialized) : undefined;
+    return Array.isArray(parsed) ? (parsed as CitizenReport[]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function persistReports() {
+  if (!canUseLocalStorage()) {
+    return;
+  }
+
+  try {
+    globalThis.localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
+  } catch {
+    // Persistence is best-effort so the app can keep working in private or restricted storage modes.
+  }
+}
+
+function getNextReportNumber(items: CitizenReport[]) {
+  const maxReportNumber = items.reduce((max, report) => {
+    const match = report.id.match(/(\d+)$/);
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 124);
+
+  return maxReportNumber + 1;
+}
+
+let reports: CitizenReport[] = readStoredReports() ?? seedReports;
 const listeners = new Set<() => void>();
+let nextGeneratedReportNumber = getNextReportNumber(reports);
 
-function emitReportsChanged() {
-  listeners.forEach(listener => listener());
+function getTimestampLabel() {
+  const now = new Date();
+  const hours = now.getHours().toString().padStart(2, '0');
+  const minutes = now.getMinutes().toString().padStart(2, '0');
+  return `Today, ${hours}:${minutes}`;
 }
 
-export function subscribeReports(listener: () => void) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+function getReportYear() {
+  return new Date().getFullYear();
 }
 
-export function listReports() {
-  return reports.map(report => ({
-    ...report,
-    attachments: [...report.attachments],
-    publicUpdates: report.publicUpdates.map(update => ({
-      ...update,
-      attachments: update.attachments?.map(attachment => ({ ...attachment })),
-    })),
-  }));
-}
-
-export function getReportById(id: string) {
-  const report = reports.find(item => item.id === id);
-  return report
-    ? {
-        ...report,
-        attachments: [...report.attachments],
-        publicUpdates: report.publicUpdates.map(update => ({
-          ...update,
-          attachments: update.attachments?.map(attachment => ({ ...attachment })),
-        })),
-      }
-    : undefined;
-}
-
-export function getCurrentReport() {
-  const report = reports.find(item => item.id === 'SAL - 2026 - 00124') ?? reports[0];
+function cloneReport(report: CitizenReport) {
   return {
     ...report,
     attachments: [...report.attachments],
@@ -236,27 +255,81 @@ export function getCurrentReport() {
   };
 }
 
+function emitReportsChanged() {
+  persistReports();
+  listeners.forEach(listener => listener());
+}
+
+export function subscribeReports(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+export function listReports() {
+  return reports.map(cloneReport);
+}
+
+export function getReportById(id: string) {
+  const report = reports.find(item => item.id === id);
+  return report ? cloneReport(report) : undefined;
+}
+
+export function getCurrentReport() {
+  const report = reports.find(item => item.status !== 'resolved' && item.status !== 'rejected') ?? reports[0];
+  return cloneReport(report);
+}
+
+export function createCitizenReport(
+  report: Omit<CitizenReport, 'id' | 'createdAt' | 'updatedAt' | 'resolvedAt'> & {
+    createdAt?: string;
+    updatedAt?: string;
+  },
+) {
+  const id = `SAL - ${getReportYear()} - ${String(nextGeneratedReportNumber).padStart(5, '0')}`;
+  nextGeneratedReportNumber += 1;
+
+  const createdAt = report.createdAt ?? getTimestampLabel();
+
+  reports.unshift({
+    ...report,
+    id,
+    createdAt,
+    updatedAt: report.updatedAt ?? createdAt,
+    attachments: [...report.attachments],
+    publicUpdates: report.publicUpdates.map(update => ({
+      ...update,
+      attachments: update.attachments?.map(attachment => ({ ...attachment })),
+    })),
+  });
+  emitReportsChanged();
+  return id;
+}
+
 export function updateReport(id: string, patch: Partial<CitizenReport>) {
   const index = reports.findIndex(report => report.id === id);
 
   if (index === -1) {
-    return;
+    return false;
   }
 
   const nextStatus = patch.status;
   const shouldClearResolvedAt = Boolean(nextStatus && nextStatus !== 'resolved');
+  const updatedAt = patch.updatedAt ?? getTimestampLabel();
 
   reports[index] = {
     ...reports[index],
     ...patch,
-    updatedAt: patch.updatedAt ?? 'Just now',
+    updatedAt,
     resolvedAt: nextStatus === 'resolved'
-      ? patch.resolvedAt ?? 'Just now'
+      ? patch.resolvedAt ?? updatedAt
       : shouldClearResolvedAt
         ? undefined
         : patch.resolvedAt ?? reports[index].resolvedAt,
   };
   emitReportsChanged();
+  return true;
 }
 
 export function addReportUpdate(
@@ -269,22 +342,23 @@ export function addReportUpdate(
   const trimmedMessage = message.trim();
 
   if (index === -1 || !trimmedMessage) {
-    return;
+    return false;
   }
 
   const shouldClearResolvedAt = status !== 'resolved';
+  const updatedAt = getTimestampLabel();
 
   reports[index] = {
     ...reports[index],
     status,
-    updatedAt: 'Just now',
-    resolvedAt: status === 'resolved' ? 'Just now' : shouldClearResolvedAt ? undefined : reports[index].resolvedAt,
+    updatedAt,
+    resolvedAt: status === 'resolved' ? updatedAt : shouldClearResolvedAt ? undefined : reports[index].resolvedAt,
     publicUpdates: [
       {
         id: `update-${id}-${Date.now()}`,
         sender: 'authority',
         message: trimmedMessage,
-        createdAt: 'Just now',
+        createdAt: updatedAt,
         status,
         attachments: attachments.map(attachment => ({ ...attachment })),
       },
@@ -292,6 +366,7 @@ export function addReportUpdate(
     ],
   };
   emitReportsChanged();
+  return true;
 }
 
 export function addCitizenReply(id: string, message: string, attachments: ConversationAttachment[] = []) {
@@ -299,24 +374,27 @@ export function addCitizenReply(id: string, message: string, attachments: Conver
   const trimmedMessage = message.trim();
 
   if (index === -1 || (!trimmedMessage && attachments.length === 0)) {
-    return;
+    return false;
   }
+
+  const updatedAt = getTimestampLabel();
 
   reports[index] = {
     ...reports[index],
-    updatedAt: 'Just now',
+    updatedAt,
     publicUpdates: [
       {
         id: `reply-${id}-${Date.now()}`,
         sender: 'citizen',
         message: trimmedMessage || 'Attachment added.',
-        createdAt: 'Just now',
+        createdAt: updatedAt,
         attachments: attachments.map(attachment => ({ ...attachment })),
       },
       ...reports[index].publicUpdates,
     ],
   };
   emitReportsChanged();
+  return true;
 }
 
 export function getResolvedReports() {

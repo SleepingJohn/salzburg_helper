@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { listReports, statusLabels, subscribeReports } from '../data/reports';
 import theme from '../theme';
 import { RootStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Welcome'>;
 
-type SortMode = 'newest' | 'upvotes' | 'downvotes';
+type FilterMode = 'newest' | 'upvotes' | 'mine';
+type UpvoteSortDirection = 'desc' | 'asc';
 
 const figmaGreen = '#2E7F18';
 
@@ -22,6 +23,7 @@ type Issue = {
   summary: string;
   upvotes: number;
   downvotes: number;
+  isMine: boolean;
 };
 
 const issues: Issue[] = [
@@ -35,6 +37,7 @@ const issues: Issue[] = [
     summary: 'A stone is rocking near the crossing and people keep stepping around it.',
     upvotes: 42,
     downvotes: 3,
+    isMine: false,
   },
   {
     id: 'sal-2179',
@@ -46,6 +49,7 @@ const issues: Issue[] = [
     summary: 'Lamp outside house 12 switches off every few minutes after sunset.',
     upvotes: 28,
     downvotes: 1,
+    isMine: false,
   },
   {
     id: 'sal-2164',
@@ -57,6 +61,7 @@ const issues: Issue[] = [
     summary: 'Waste is spreading onto the sidewalk next to the bus shelter.',
     upvotes: 19,
     downvotes: 6,
+    isMine: false,
   },
   {
     id: 'sal-2142',
@@ -68,21 +73,38 @@ const issues: Issue[] = [
     summary: 'Temporary sign forces cyclists into car traffic during morning rush.',
     upvotes: 64,
     downvotes: 11,
+    isMine: false,
   },
 ];
 
-const sortOptions: { label: string; value: SortMode; icon: keyof typeof MaterialCommunityIcons.glyphMap }[] = [
+const filterOptions: { label: string; value: FilterMode; icon: keyof typeof MaterialCommunityIcons.glyphMap }[] = [
   { label: 'Newest', value: 'newest', icon: 'clock-outline' },
-  { label: 'Most upvoted', value: 'upvotes', icon: 'arrow-up-bold-outline' },
-  { label: 'Most downvoted', value: 'downvotes', icon: 'arrow-down-bold-outline' },
+  { label: 'Upvotes', value: 'upvotes', icon: 'arrow-up-bold-outline' },
+  { label: 'My issues', value: 'mine', icon: 'clipboard-account-outline' },
 ];
 
+function getSortableDate(label: string) {
+  if (label.startsWith('Today')) {
+    const today = new Date();
+    const [hours = '00', minutes = '00'] = label.split(', ')[1]?.split(':') ?? [];
+    today.setHours(Number(hours), Number(minutes), 0, 0);
+    return today.toISOString();
+  }
+
+  const parsed = new Date(label);
+  return Number.isNaN(parsed.getTime()) ? new Date(0).toISOString() : parsed.toISOString();
+}
+
 export default function WelcomeScreen({ navigation }: Props) {
+  const { width } = useWindowDimensions();
   const [query, setQuery] = useState('');
-  const [sortMode, setSortMode] = useState<SortMode>('newest');
+  const [filterMode, setFilterMode] = useState<FilterMode>('newest');
+  const [upvoteSortDirection, setUpvoteSortDirection] = useState<UpvoteSortDirection>('desc');
   const [votes, setVotes] = useState<Record<string, 1 | -1 | 0>>({});
   const [menuOpen, setMenuOpen] = useState(false);
   const [reports, setReports] = useState(listReports());
+  const compactSort = width < 380;
+  const tightSort = width < 340;
 
   useEffect(() => {
     return subscribeReports(() => setReports(listReports()));
@@ -97,11 +119,12 @@ export default function WelcomeScreen({ navigation }: Props) {
           title: report.title,
           author: report.citizenName,
           location: report.location,
-          createdAt: report.createdAt.startsWith('Today') ? `2026-06-16T${report.createdAt.split(', ')[1] ?? '10:24'}:00` : report.createdAt,
+          createdAt: getSortableDate(report.createdAt),
           createdLabel: report.createdAt,
           summary: `${report.issue} | ${statusLabels[report.status]} | ${report.department}`,
           upvotes: 0,
           downvotes: 0,
+          isMine: true,
         })),
     [reports],
   );
@@ -110,6 +133,7 @@ export default function WelcomeScreen({ navigation }: Props) {
     const normalizedQuery = query.trim().toLowerCase();
 
     return [...createdIssues, ...issues]
+      .filter(issue => (filterMode === 'mine' ? issue.isMine : true))
       .filter(issue => {
         if (!normalizedQuery) {
           return true;
@@ -126,17 +150,27 @@ export default function WelcomeScreen({ navigation }: Props) {
         downvotes: issue.downvotes + (votes[issue.id] === -1 ? 1 : 0),
       }))
       .sort((left, right) => {
-        if (sortMode === 'upvotes') {
-          return right.upvotes - left.upvotes;
-        }
-
-        if (sortMode === 'downvotes') {
-          return right.downvotes - left.downvotes;
+        if (filterMode === 'upvotes') {
+          const leftScore = left.upvotes - left.downvotes;
+          const rightScore = right.upvotes - right.downvotes;
+          return upvoteSortDirection === 'desc' ? rightScore - leftScore : leftScore - rightScore;
         }
 
         return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
       });
-  }, [createdIssues, query, sortMode, votes]);
+  }, [createdIssues, filterMode, query, upvoteSortDirection, votes]);
+
+  const selectFilter = (mode: FilterMode) => {
+    if (mode === 'upvotes') {
+      if (filterMode === 'upvotes') {
+        setUpvoteSortDirection(current => (current === 'desc' ? 'asc' : 'desc'));
+      } else {
+        setUpvoteSortDirection('desc');
+      }
+    }
+
+    setFilterMode(mode);
+  };
 
   const updateVote = (issueId: string, vote: 1 | -1) => {
     setVotes(current => ({
@@ -231,17 +265,44 @@ export default function WelcomeScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.sortGrid}>
-          {sortOptions.map(option => {
-            const active = sortMode === option.value;
+          {filterOptions.map(option => {
+            const active = filterMode === option.value;
+            const label =
+              option.value === 'upvotes' && active
+                ? upvoteSortDirection === 'desc'
+                  ? 'Most votes'
+                  : 'Least votes'
+                : option.label;
+            const icon =
+              option.value === 'upvotes' && active && upvoteSortDirection === 'asc'
+                ? 'arrow-down-bold-outline'
+                : option.icon;
 
             return (
               <Pressable
                 key={option.value}
-                style={[styles.sortButton, active && styles.sortButtonActive]}
-                onPress={() => setSortMode(option.value)}
+                style={[
+                  styles.sortButton,
+                  compactSort && styles.sortButtonCompact,
+                  tightSort && styles.sortButtonTight,
+                  active && styles.sortButtonActive,
+                ]}
+                onPress={() => selectFilter(option.value)}
               >
-                <MaterialCommunityIcons name={option.icon} size={18} color={active ? '#fff' : figmaGreen} />
-                <Text style={[styles.sortButtonText, active && styles.sortButtonTextActive]}>{option.label}</Text>
+                <MaterialCommunityIcons name={icon} size={compactSort ? 14 : 18} color={active ? '#fff' : figmaGreen} />
+                <Text
+                  style={[
+                    styles.sortButtonText,
+                    compactSort && styles.sortButtonTextCompact,
+                    tightSort && styles.sortButtonTextTight,
+                    active && styles.sortButtonTextActive,
+                  ]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.72}
+                >
+                  {label}
+                </Text>
               </Pressable>
             );
           })}
@@ -257,7 +318,7 @@ export default function WelcomeScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.issueList}>
-          {filteredIssues.map(issue => {
+          {filteredIssues.length ? filteredIssues.map(issue => {
             const selectedVote = votes[issue.id] ?? 0;
 
             return (
@@ -308,7 +369,11 @@ export default function WelcomeScreen({ navigation }: Props) {
                 </View>
               </View>
             );
-          })}
+          }) : (
+            <View style={styles.emptyIssues}>
+              <Text style={styles.emptyIssuesText}>No open issues found.</Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -441,31 +506,50 @@ const styles = StyleSheet.create({
   },
   sortGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
+    gap: 6,
     marginBottom: 20,
   },
   sortButton: {
-    minHeight: 50,
+    flex: 1,
+    minWidth: 0,
+    minHeight: 44,
     borderRadius: 40,
     backgroundColor: '#fff',
-    paddingHorizontal: 15,
+    paddingHorizontal: 7,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
+    justifyContent: 'center',
+    gap: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.05,
     shadowRadius: 20,
     elevation: 2,
   },
+  sortButtonCompact: {
+    minHeight: 40,
+    paddingHorizontal: 5,
+    gap: 3,
+  },
+  sortButtonTight: {
+    paddingHorizontal: 3,
+    gap: 2,
+  },
   sortButtonActive: {
     backgroundColor: figmaGreen,
   },
   sortButtonText: {
+    flexShrink: 1,
+    minWidth: 0,
     color: '#394050',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
+  },
+  sortButtonTextCompact: {
+    fontSize: 10,
+  },
+  sortButtonTextTight: {
+    fontSize: 9,
   },
   sortButtonTextActive: {
     color: '#fff',
@@ -503,6 +587,19 @@ const styles = StyleSheet.create({
   },
   issueList: {
     gap: 15,
+  },
+  emptyIssues: {
+    minHeight: 80,
+    borderRadius: 24,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 18,
+  },
+  emptyIssuesText: {
+    color: theme.colors.muted,
+    fontSize: 14,
+    fontWeight: '700',
   },
   issueCard: {
     flexDirection: 'row',

@@ -13,9 +13,11 @@ const citizenGreen = '#2E7F18';
 const brandRed = '#A20B0B';
 
 type SpeechRecognitionEvent = {
+  resultIndex: number;
   results: {
     length: number;
     [index: number]: {
+      isFinal: boolean;
       [index: number]: {
         transcript: string;
       };
@@ -53,6 +55,14 @@ const getSpeechRecognition = (): SpeechRecognitionConstructor | null => {
   return browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition ?? null;
 };
 
+const getSpeechRecognitionLanguage = () => {
+  if (typeof navigator === 'undefined') {
+    return 'de-AT';
+  }
+
+  return navigator.language || 'de-AT';
+};
+
 const formatTime = (value: number) => {
   const minutes = Math.floor(value / 60);
   const secs = value % 60;
@@ -76,11 +86,13 @@ export default function RecordScreen({ route, navigation }: Props) {
   const [speechSupported] = useState(() => getSpeechRecognition() !== null);
   const [speechStatus, setSpeechStatus] = useState(
     speechSupported
-      ? 'Ready for voice recognition. Use Chrome or Edge and allow microphone access.'
-      : 'Real speech-to-text is available in Expo Web only. Type the transcript below on Expo Go.',
+      ? 'Ready for live transcription. Allow microphone access when prompted.'
+      : 'Speech-to-text is available on Expo Web in Chrome or Edge. On Expo Go, type the transcript below.',
   );
   const interval = useRef<ReturnType<typeof setInterval> | null>(null);
   const recognition = useRef<SpeechRecognitionInstance | null>(null);
+  const finalTranscript = useRef('');
+  const latestTranscript = useRef('');
 
   useEffect(() => {
     if (recording) {
@@ -109,39 +121,53 @@ export default function RecordScreen({ route, navigation }: Props) {
 
     if (!SpeechRecognition) {
       setRecording(false);
-      setHasRecording(true);
-      setSpeechStatus('Speech-to-text is not available here. Run Expo Web in Chrome/Edge, or type the transcript below.');
+      setSpeechStatus('Live transcription is not available in this runtime. Type the message below, or run Expo Web in Chrome/Edge.');
       return;
     }
 
     setRecording(true);
-    setVoiceMessage('');
+    finalTranscript.current = voiceMessage.trim();
+    latestTranscript.current = voiceMessage.trim();
     setSpeechStatus('Starting voice recognition...');
 
     const recognizer = new SpeechRecognition();
     recognizer.continuous = true;
     recognizer.interimResults = true;
-    recognizer.lang = 'en-US';
+    recognizer.lang = getSpeechRecognitionLanguage();
     recognizer.onresult = event => {
-      let transcript = '';
+      let interimTranscript = '';
 
-      for (let index = 0; index < event.results.length; index += 1) {
-        transcript += event.results[index][0].transcript;
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const transcript = event.results[index][0].transcript;
+
+        if (event.results[index].isFinal) {
+          finalTranscript.current = `${finalTranscript.current} ${transcript}`.trim();
+        } else {
+          interimTranscript = `${interimTranscript} ${transcript}`.trim();
+        }
       }
 
-      setVoiceMessage(transcript.trim());
-      setSpeechStatus('Listening...');
+      const nextTranscript = `${finalTranscript.current} ${interimTranscript}`.trim();
+      latestTranscript.current = nextTranscript;
+      setVoiceMessage(nextTranscript);
+      setSpeechStatus(interimTranscript ? 'Listening and transcribing...' : 'Listening...');
     };
     recognizer.onerror = event => {
       const reason = event.error ? ` (${event.error})` : '';
       setSpeechStatus(`Voice recognition failed${reason}. Check microphone permission or type the transcript below.`);
       setRecording(false);
-      setHasRecording(true);
+      setHasRecording(Boolean(latestTranscript.current.trim()));
+      recognition.current = null;
     };
     recognizer.onend = () => {
       setRecording(false);
-      setHasRecording(true);
-      setSpeechStatus('Recording stopped. Review or edit the transcript.');
+      setHasRecording(Boolean(finalTranscript.current.trim() || latestTranscript.current.trim()));
+      setSpeechStatus(
+        finalTranscript.current.trim() || latestTranscript.current.trim()
+          ? 'Recording stopped. Review or edit the transcript.'
+          : 'Recording stopped without transcript. Try again or type the message below.',
+      );
+      recognition.current = null;
     };
 
     recognition.current = recognizer;
@@ -149,7 +175,7 @@ export default function RecordScreen({ route, navigation }: Props) {
       recognizer.start();
     } catch {
       setRecording(false);
-      setHasRecording(true);
+      setHasRecording(Boolean(latestTranscript.current.trim()));
       setSpeechStatus('Voice recognition could not start. Refresh the browser or type the transcript below.');
     }
   };
@@ -162,8 +188,12 @@ export default function RecordScreen({ route, navigation }: Props) {
     recognition.current?.stop();
     recognition.current = null;
     setRecording(false);
-    setHasRecording(true);
-    setSpeechStatus('Recording stopped. Review or edit the transcript.');
+    setHasRecording(Boolean(latestTranscript.current.trim()));
+    setSpeechStatus(
+      latestTranscript.current.trim()
+        ? 'Recording stopped. Review or edit the transcript.'
+        : 'Recording stopped without transcript. Try again or type the message below.',
+    );
   };
 
   const toggleRecording = () => {
@@ -266,7 +296,13 @@ export default function RecordScreen({ route, navigation }: Props) {
     navigation.navigate('Processing', {
       nativeLanguage: 'English',
       mockTranscript: context,
+      citizenMessage: voiceMessage.trim(),
       issueTitle: issueTitle.trim(),
+      fullName: fullName.trim(),
+      email: email.trim(),
+      address: address.trim(),
+      hasPhoto: Boolean(photoUri),
+      fileName: fileName.trim(),
     });
   };
 
@@ -347,7 +383,10 @@ export default function RecordScreen({ route, navigation }: Props) {
               <TextInput
                 style={styles.issueInput}
                 value={voiceMessage}
-                onChangeText={setVoiceMessage}
+                onChangeText={text => {
+                  latestTranscript.current = text;
+                  setVoiceMessage(text);
+                }}
                 multiline
                 placeholder="Describe the issue...."
                 placeholderTextColor="#8c8c8c"
@@ -374,23 +413,27 @@ export default function RecordScreen({ route, navigation }: Props) {
             </View>
           </View>
 
-          <View style={styles.supportBlock}>
-            <Text style={styles.supportText}>Or tap the mic to speak.</Text>
-            <Text style={styles.supportText}>We support all languages.</Text>
-            <Text style={styles.statusText}>
-              {recording ? `Recording ${formatTime(seconds)}` : hasRecording ? 'Voice memo ready.' : speechStatus}
-            </Text>
-            <Pressable disabled={!photoUri} onPress={photoUri ? removePhoto : undefined}>
-              <Text style={[styles.attachmentText, photoUri && styles.attachmentTextActive]}>
-                {photoUri ? 'Photo attached. Tap to remove.' : photoStatus}
-              </Text>
-            </Pressable>
-            <Pressable disabled={!fileUri} onPress={fileUri ? removeFile : undefined}>
-              <Text style={[styles.attachmentText, fileUri && styles.attachmentTextActive]}>
-                {fileUri ? `${fileName || 'File attached'}. Tap to remove.` : fileStatus}
-              </Text>
-            </Pressable>
-          </View>
+          {recording || hasRecording || photoUri || fileUri ? (
+            <View style={styles.supportBlock}>
+              {recording || hasRecording ? (
+                <Text style={styles.statusText}>
+                  {recording ? `Recording ${formatTime(seconds)}` : 'Voice memo ready.'}
+                </Text>
+              ) : null}
+              {photoUri ? (
+                <Pressable onPress={removePhoto}>
+                  <Text style={[styles.attachmentText, styles.attachmentTextActive]}>Photo attached. Tap to remove.</Text>
+                </Pressable>
+              ) : null}
+              {fileUri ? (
+                <Pressable onPress={removeFile}>
+                  <Text style={[styles.attachmentText, styles.attachmentTextActive]}>
+                    {fileName || 'File attached'}. Tap to remove.
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
 
           <Pressable
             style={[styles.submitButton, !canContinue && styles.buttonDisabled]}

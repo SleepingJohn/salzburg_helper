@@ -20,17 +20,30 @@ Install dependencies:
 npm install
 ```
 
-Start Expo:
+Start Expo for browser/local development:
 
 ```bash
 npm start
 ```
 
+Use the npm scripts instead of `npx expo start -c`; the scripts pin the project to the local Expo CLI and Node 20, which avoids Metro start issues on this machine.
+
 ## Open With Expo Go
 
 1. Install **Expo Go** on your phone.
-2. Run `npm start`.
+2. Run the phone-friendly tunnel server:
+
+```bash
+npm run start:phone
+```
+
 3. Scan the QR code shown in the terminal.
+
+Tunnel mode is slower than local web mode, but it is the most reliable option when the phone cannot reach the Mac over the local network. If your phone and Mac are on the same Wi-Fi and the QR still does not open, try:
+
+```bash
+npm run start:lan
+```
 
 ## Open In Browser
 

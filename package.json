@@ -4,10 +4,12 @@
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
+    "start": "PATH=\"/opt/homebrew/opt/node@20/bin:$PATH\" EXPO_NO_TELEMETRY=1 EXPO_NO_DEPENDENCY_VALIDATION=1 node node_modules/@expo/cli/build/bin/cli start",
+    "start:phone": "PATH=\"/opt/homebrew/opt/node@20/bin:$PATH\" EXPO_NO_TELEMETRY=1 EXPO_NO_DEPENDENCY_VALIDATION=1 node node_modules/@expo/cli/build/bin/cli start --tunnel -c --port 8081",
+    "start:lan": "PATH=\"/opt/homebrew/opt/node@20/bin:$PATH\" EXPO_NO_TELEMETRY=1 EXPO_NO_DEPENDENCY_VALIDATION=1 node node_modules/@expo/cli/build/bin/cli start --lan -c --port 8081",
+    "android": "PATH=\"/opt/homebrew/opt/node@20/bin:$PATH\" EXPO_NO_TELEMETRY=1 EXPO_NO_DEPENDENCY_VALIDATION=1 node node_modules/@expo/cli/build/bin/cli start --android",
+    "ios": "PATH=\"/opt/homebrew/opt/node@20/bin:$PATH\" EXPO_NO_TELEMETRY=1 EXPO_NO_DEPENDENCY_VALIDATION=1 node node_modules/@expo/cli/build/bin/cli start --ios",
+    "web": "PATH=\"/opt/homebrew/opt/node@20/bin:$PATH\" EXPO_NO_TELEMETRY=1 EXPO_NO_DEPENDENCY_VALIDATION=1 node node_modules/@expo/cli/build/bin/cli start --web --localhost"
   },
   "dependencies": {
     "@react-navigation/native": "^6.1.7",

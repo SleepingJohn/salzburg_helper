@@ -238,7 +238,7 @@ export default function AuthorityDashboardScreen({ navigation }: Props) {
       return;
     }
 
-    updateReport(resolveTarget.id, { status: 'resolved' });
+    addReportUpdate(resolveTarget.id, 'Your report has been resolved by Stadt Salzburg.', 'resolved');
     setMessage(`${resolveTarget.id} marked as resolved.`);
     setResolveReportId('');
   };
@@ -485,7 +485,7 @@ export default function AuthorityDashboardScreen({ navigation }: Props) {
                       </View>
                     ) : null}
 
-                    {report.status !== 'resolved' ? (
+                    {isOpen(report) ? (
                       <>
                         <Text style={styles.inputLabel}>Status for this update</Text>
                         <View style={styles.caseStatusGrid}>
@@ -508,7 +508,7 @@ export default function AuthorityDashboardScreen({ navigation }: Props) {
                       </>
                     ) : null}
 
-                    {report.status !== 'resolved' ? (
+                    {isOpen(report) ? (
                       <>
                         <Text style={styles.inputLabel}>Citizen update</Text>
                         <TextInput
@@ -551,13 +551,13 @@ export default function AuthorityDashboardScreen({ navigation }: Props) {
                     ) : null}
 
                     <View style={styles.actions}>
-                      {report.status !== 'resolved' && report.status !== 'rejected' ? (
+                      {isOpen(report) ? (
                         <Pressable style={styles.primaryAction} onPress={() => setResolveReportId(report.id)}>
                           <MaterialCommunityIcons name="check" size={18} color="#fff" />
                           <Text style={styles.primaryActionText}>Mark resolved</Text>
                         </Pressable>
                       ) : null}
-                      {report.status !== 'resolved' ? (
+                      {isOpen(report) ? (
                         <Pressable style={styles.secondaryAction} onPress={() => sendPublicUpdate(report)}>
                           <MaterialCommunityIcons name="send-outline" size={18} color={adminBlue} />
                           <Text style={styles.secondaryActionText}>Send update</Text>

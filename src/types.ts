@@ -9,9 +9,17 @@ export type RootStackParamList = {
   Processing: {
     nativeLanguage: string;
     mockTranscript: string;
-    issueTitle: string;
+    citizenMessage: string;
+    issueTitle?: string;
+    fullName?: string;
+    email?: string;
+    address?: string;
+    hasPhoto?: boolean;
+    fileName?: string;
+    voiceUri?: string;
   };
   Success: {
+    reportId: string;
     citizenMessage: string;
     germanMessage: string;
     issue: string;
