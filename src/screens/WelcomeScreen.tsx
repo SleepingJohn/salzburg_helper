@@ -10,6 +10,15 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Welcome'>;
 
 type FilterMode = 'newest' | 'upvotes' | 'mine';
 type UpvoteSortDirection = 'desc' | 'asc';
+type AdvancedSearchFilters = {
+  title: string;
+  location: string;
+  author: string;
+  department: string;
+  status: string;
+  date: string;
+};
+type AdvancedDropdown = 'department' | 'status' | 'date' | '';
 
 const figmaGreen = '#2E7F18';
 
@@ -21,6 +30,9 @@ type Issue = {
   createdAt: string;
   createdLabel: string;
   summary: string;
+  description: string;
+  statusLabel: string;
+  department?: string;
   upvotes: number;
   downvotes: number;
   isMine: boolean;
@@ -35,6 +47,10 @@ const issues: Issue[] = [
     createdAt: '2026-06-16T09:30:00',
     createdLabel: 'Today, 09:30',
     summary: 'A stone is rocking near the crossing and people keep stepping around it.',
+    description:
+      'A loose paving stone near the crossing is rocking when people step on it. Several pedestrians are avoiding the spot and it could become a trip hazard.',
+    statusLabel: 'Community report',
+    department: 'Road Maintenance',
     upvotes: 42,
     downvotes: 3,
     isMine: false,
@@ -47,6 +63,10 @@ const issues: Issue[] = [
     createdAt: '2026-06-15T19:10:00',
     createdLabel: 'Yesterday, 19:10',
     summary: 'Lamp outside house 12 switches off every few minutes after sunset.',
+    description:
+      'The street light outside house 12 flickers after sunset and repeatedly turns off, leaving the entrance area poorly lit.',
+    statusLabel: 'Community report',
+    department: 'Public Lighting',
     upvotes: 28,
     downvotes: 1,
     isMine: false,
@@ -59,6 +79,10 @@ const issues: Issue[] = [
     createdAt: '2026-06-14T15:45:00',
     createdLabel: 'Jun 14, 15:45',
     summary: 'Waste is spreading onto the sidewalk next to the bus shelter.',
+    description:
+      'The bin at the bus stop is full and waste is already spreading onto the sidewalk. The area needs cleanup and an empty bin.',
+    statusLabel: 'Community report',
+    department: 'Waste Management',
     upvotes: 19,
     downvotes: 6,
     isMine: false,
@@ -71,6 +95,10 @@ const issues: Issue[] = [
     createdAt: '2026-06-12T08:05:00',
     createdLabel: 'Jun 12, 08:05',
     summary: 'Temporary sign forces cyclists into car traffic during morning rush.',
+    description:
+      'A temporary sign blocks the bike lane on Elisabethkai and forces cyclists into car traffic during busy morning hours.',
+    statusLabel: 'Community report',
+    department: 'Traffic Management',
     upvotes: 64,
     downvotes: 11,
     isMine: false,
@@ -82,6 +110,17 @@ const filterOptions: { label: string; value: FilterMode; icon: keyof typeof Mate
   { label: 'Upvotes', value: 'upvotes', icon: 'arrow-up-bold-outline' },
   { label: 'My issues', value: 'mine', icon: 'clipboard-account-outline' },
 ];
+
+const emptyAdvancedFilters: AdvancedSearchFilters = {
+  title: '',
+  location: '',
+  author: '',
+  department: '',
+  status: '',
+  date: '',
+};
+
+const weekdayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 function getSortableDate(label: string) {
   if (label.startsWith('Today')) {
@@ -95,13 +134,74 @@ function getSortableDate(label: string) {
   return Number.isNaN(parsed.getTime()) ? new Date(0).toISOString() : parsed.toISOString();
 }
 
+function getDateFilterValue(createdAt: string) {
+  return createdAt.slice(0, 10);
+}
+
+function getDateOptionLabel(value: string) {
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (value === today) {
+    return 'Today';
+  }
+
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function getUniqueOptions(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean))).sort((left, right) => left.localeCompare(right));
+}
+
+function formatDateValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getMonthTitle(date: Date) {
+  return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
+
+function addMonths(date: Date, amount: number) {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+
+function getCalendarDays(monthDate: Date) {
+  const year = monthDate.getFullYear();
+  const month = monthDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const mondayBasedOffset = (firstDay.getDay() + 6) % 7;
+  const days: Array<{ label: string; value: string; inMonth: boolean }> = [];
+
+  for (let index = 0; index < mondayBasedOffset; index += 1) {
+    days.push({ label: '', value: `empty-${index}`, inMonth: false });
+  }
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = new Date(year, month, day);
+    days.push({ label: String(day), value: formatDateValue(date), inMonth: true });
+  }
+
+  return days;
+}
+
 export default function WelcomeScreen({ navigation }: Props) {
   const { width } = useWindowDimensions();
   const [query, setQuery] = useState('');
+  const [advancedSearchOpen, setAdvancedSearchOpen] = useState(false);
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedSearchFilters>(emptyAdvancedFilters);
+  const [advancedDropdownOpen, setAdvancedDropdownOpen] = useState<AdvancedDropdown>('');
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [filterMode, setFilterMode] = useState<FilterMode>('newest');
   const [upvoteSortDirection, setUpvoteSortDirection] = useState<UpvoteSortDirection>('desc');
   const [votes, setVotes] = useState<Record<string, 1 | -1 | 0>>({});
   const [menuOpen, setMenuOpen] = useState(false);
+  const [expandedIssueId, setExpandedIssueId] = useState('');
   const [reports, setReports] = useState(listReports());
   const compactSort = width < 380;
   const tightSort = width < 340;
@@ -122,6 +222,9 @@ export default function WelcomeScreen({ navigation }: Props) {
           createdAt: getSortableDate(report.createdAt),
           createdLabel: report.createdAt,
           summary: `${report.issue} | ${statusLabels[report.status]} | ${report.department}`,
+          description: report.citizenMessage || report.translatedMessage,
+          statusLabel: statusLabels[report.status],
+          department: report.department,
           upvotes: 0,
           downvotes: 0,
           isMine: true,
@@ -131,6 +234,14 @@ export default function WelcomeScreen({ navigation }: Props) {
 
   const filteredIssues = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
+    const normalizedAdvancedFilters = {
+      title: advancedFilters.title.trim().toLowerCase(),
+      location: advancedFilters.location.trim().toLowerCase(),
+      author: advancedFilters.author.trim().toLowerCase(),
+      department: advancedFilters.department.trim().toLowerCase(),
+      status: advancedFilters.status.trim().toLowerCase(),
+      date: advancedFilters.date.trim(),
+    };
 
     return [...createdIssues, ...issues]
       .filter(issue => (filterMode === 'mine' ? issue.isMine : true))
@@ -143,6 +254,24 @@ export default function WelcomeScreen({ navigation }: Props) {
           .join(' ')
           .toLowerCase()
           .includes(normalizedQuery);
+      })
+      .filter(issue => {
+        const searchable = {
+          title: issue.title.toLowerCase(),
+          location: issue.location.toLowerCase(),
+          author: issue.author.toLowerCase(),
+          department: (issue.department ?? '').toLowerCase(),
+          status: issue.statusLabel.toLowerCase(),
+          date: getDateFilterValue(issue.createdAt),
+        };
+
+        return Object.entries(normalizedAdvancedFilters).every(([key, value]) => {
+          if (!value) {
+            return true;
+          }
+
+          return searchable[key as keyof typeof searchable].includes(value);
+        });
       })
       .map(issue => ({
         ...issue,
@@ -158,7 +287,31 @@ export default function WelcomeScreen({ navigation }: Props) {
 
         return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
       });
-  }, [createdIssues, filterMode, query, upvoteSortDirection, votes]);
+  }, [advancedFilters, createdIssues, filterMode, query, upvoteSortDirection, votes]);
+
+  const advancedFilterCount = Object.values(advancedFilters).filter(value => value.trim()).length;
+  const allIssues = useMemo(() => [...createdIssues, ...issues], [createdIssues]);
+  const departmentOptions = useMemo(
+    () => getUniqueOptions(allIssues.map(issue => issue.department ?? '')),
+    [allIssues],
+  );
+  const statusOptions = useMemo(
+    () => getUniqueOptions(allIssues.map(issue => issue.statusLabel)),
+    [allIssues],
+  );
+  const calendarDays = useMemo(() => getCalendarDays(calendarMonth), [calendarMonth]);
+
+  const updateAdvancedFilter = (key: keyof AdvancedSearchFilters, value: string) => {
+    setAdvancedFilters(current => ({
+      ...current,
+      [key]: value,
+    }));
+  };
+
+  const clearAdvancedFilters = () => {
+    setAdvancedFilters(emptyAdvancedFilters);
+    setAdvancedDropdownOpen('');
+  };
 
   const selectFilter = (mode: FilterMode) => {
     if (mode === 'upvotes') {
@@ -206,40 +359,6 @@ export default function WelcomeScreen({ navigation }: Props) {
           >
             <MaterialCommunityIcons name="menu" size={24} color="#111" />
           </Pressable>
-          {menuOpen ? (
-            <View style={styles.menuPanel}>
-              <Pressable
-                style={styles.menuItem}
-                onPress={() => {
-                  setMenuOpen(false);
-                  navigation.navigate('Tracking');
-                }}
-              >
-                <MaterialCommunityIcons name="clipboard-text-clock-outline" size={19} color={figmaGreen} />
-                <Text style={styles.menuItemText}>Status</Text>
-              </Pressable>
-              <Pressable
-                style={styles.menuItem}
-                onPress={() => {
-                  setMenuOpen(false);
-                  navigation.navigate('History');
-                }}
-              >
-                <MaterialCommunityIcons name="history" size={19} color={figmaGreen} />
-                <Text style={styles.menuItemText}>History</Text>
-              </Pressable>
-              <Pressable
-                style={styles.menuItem}
-                onPress={() => {
-                  setMenuOpen(false);
-                  navigation.navigate('AuthorityDashboard');
-                }}
-              >
-                <MaterialCommunityIcons name="office-building-cog-outline" size={19} color={figmaGreen} />
-                <Text style={styles.menuItemText}>Authority view</Text>
-              </Pressable>
-            </View>
-          ) : null}
         </View>
 
         <View style={styles.searchCard}>
@@ -253,11 +372,229 @@ export default function WelcomeScreen({ navigation }: Props) {
               placeholderTextColor="#8b93a1"
               returnKeyType="search"
             />
+            {query ? (
+              <Pressable style={styles.clearSearchButton} onPress={() => setQuery('')} accessibilityLabel="Clear search">
+                <MaterialCommunityIcons name="close" size={15} color="#394050" />
+              </Pressable>
+            ) : null}
           </View>
-          <Pressable style={styles.searchAction} accessibilityLabel="Search">
-            <MaterialCommunityIcons name="arrow-right" size={20} color="#fff" />
+          <Pressable
+            style={[styles.searchAction, advancedSearchOpen && styles.searchActionActive]}
+            onPress={() => setAdvancedSearchOpen(current => !current)}
+            accessibilityLabel={advancedSearchOpen ? 'Close advanced search' : 'Open advanced search'}
+          >
+            <MaterialCommunityIcons name="tune-variant" size={19} color="#fff" />
+            {advancedFilterCount ? (
+              <View style={styles.searchFilterBadge}>
+                <Text style={styles.searchFilterBadgeText}>{advancedFilterCount}</Text>
+              </View>
+            ) : null}
           </Pressable>
         </View>
+
+        {advancedSearchOpen ? (
+          <View style={styles.advancedPanel}>
+            <View style={styles.advancedHeader}>
+              <Text style={styles.advancedTitle}>Search specific parts</Text>
+              {advancedFilterCount ? (
+                <Pressable onPress={clearAdvancedFilters} accessibilityLabel="Clear advanced search">
+                  <Text style={styles.clearFiltersText}>Clear</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <View style={styles.advancedGrid}>
+              <View style={styles.advancedField}>
+                <Text style={styles.advancedLabel}>Title</Text>
+                <TextInput
+                  style={styles.advancedInput}
+                  value={advancedFilters.title}
+                  onChangeText={value => updateAdvancedFilter('title', value)}
+                  placeholder="Street light"
+                  placeholderTextColor="#8b93a1"
+                />
+              </View>
+              <View style={styles.advancedField}>
+                <Text style={styles.advancedLabel}>Location</Text>
+                <TextInput
+                  style={styles.advancedInput}
+                  value={advancedFilters.location}
+                  onChangeText={value => updateAdvancedFilter('location', value)}
+                  placeholder="Mirabellplatz"
+                  placeholderTextColor="#8b93a1"
+                />
+              </View>
+              <View style={styles.advancedField}>
+                <Text style={styles.advancedLabel}>Author</Text>
+                <TextInput
+                  style={styles.advancedInput}
+                  value={advancedFilters.author}
+                  onChangeText={value => updateAdvancedFilter('author', value)}
+                  placeholder="Anna"
+                  placeholderTextColor="#8b93a1"
+                />
+              </View>
+              <View style={styles.advancedField}>
+                <Text style={styles.advancedLabel}>Department</Text>
+                <Pressable
+                  style={styles.advancedSelect}
+                  onPress={() =>
+                    setAdvancedDropdownOpen(current => (current === 'department' ? '' : 'department'))
+                  }
+                  accessibilityLabel="Select department"
+                >
+                  <Text style={[styles.advancedSelectText, !advancedFilters.department && styles.advancedSelectPlaceholder]}>
+                    {advancedFilters.department || 'Any department'}
+                  </Text>
+                  <MaterialCommunityIcons
+                    name={advancedDropdownOpen === 'department' ? 'chevron-up' : 'chevron-down'}
+                    size={18}
+                    color={figmaGreen}
+                  />
+                </Pressable>
+                {advancedDropdownOpen === 'department' ? (
+                  <View style={styles.advancedMenu}>
+                    {['', ...departmentOptions].map(option => (
+                      <Pressable
+                        key={option || 'any-department'}
+                        style={[styles.advancedOption, advancedFilters.department === option && styles.advancedOptionActive]}
+                        onPress={() => {
+                          updateAdvancedFilter('department', option);
+                          setAdvancedDropdownOpen('');
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.advancedOptionText,
+                            advancedFilters.department === option && styles.advancedOptionTextActive,
+                          ]}
+                        >
+                          {option || 'Any department'}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+              <View style={styles.advancedField}>
+                <Text style={styles.advancedLabel}>Status</Text>
+                <Pressable
+                  style={styles.advancedSelect}
+                  onPress={() => setAdvancedDropdownOpen(current => (current === 'status' ? '' : 'status'))}
+                  accessibilityLabel="Select status"
+                >
+                  <Text style={[styles.advancedSelectText, !advancedFilters.status && styles.advancedSelectPlaceholder]}>
+                    {advancedFilters.status || 'Any status'}
+                  </Text>
+                  <MaterialCommunityIcons
+                    name={advancedDropdownOpen === 'status' ? 'chevron-up' : 'chevron-down'}
+                    size={18}
+                    color={figmaGreen}
+                  />
+                </Pressable>
+                {advancedDropdownOpen === 'status' ? (
+                  <View style={styles.advancedMenu}>
+                    {['', ...statusOptions].map(option => (
+                      <Pressable
+                        key={option || 'any-status'}
+                        style={[styles.advancedOption, advancedFilters.status === option && styles.advancedOptionActive]}
+                        onPress={() => {
+                          updateAdvancedFilter('status', option);
+                          setAdvancedDropdownOpen('');
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.advancedOptionText,
+                            advancedFilters.status === option && styles.advancedOptionTextActive,
+                          ]}
+                        >
+                          {option || 'Any status'}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+              <View style={styles.advancedField}>
+                <Text style={styles.advancedLabel}>Date</Text>
+                <Pressable
+                  style={styles.advancedSelect}
+                  onPress={() => setAdvancedDropdownOpen(current => (current === 'date' ? '' : 'date'))}
+                  accessibilityLabel="Select date"
+                >
+                  <Text style={[styles.advancedSelectText, !advancedFilters.date && styles.advancedSelectPlaceholder]}>
+                    {advancedFilters.date ? getDateOptionLabel(advancedFilters.date) : 'Any date'}
+                  </Text>
+                  <MaterialCommunityIcons
+                    name={advancedDropdownOpen === 'date' ? 'calendar-collapse-horizontal' : 'calendar-month-outline'}
+                    size={18}
+                    color={figmaGreen}
+                  />
+                </Pressable>
+                {advancedDropdownOpen === 'date' ? (
+                  <View style={styles.calendarPanel}>
+                    <View style={styles.calendarHeader}>
+                      <Pressable
+                        style={styles.calendarNavButton}
+                        onPress={() => setCalendarMonth(current => addMonths(current, -1))}
+                        accessibilityLabel="Previous month"
+                      >
+                        <MaterialCommunityIcons name="chevron-left" size={18} color={figmaGreen} />
+                      </Pressable>
+                      <Text style={styles.calendarTitle}>{getMonthTitle(calendarMonth)}</Text>
+                      <Pressable
+                        style={styles.calendarNavButton}
+                        onPress={() => setCalendarMonth(current => addMonths(current, 1))}
+                        accessibilityLabel="Next month"
+                      >
+                        <MaterialCommunityIcons name="chevron-right" size={18} color={figmaGreen} />
+                      </Pressable>
+                    </View>
+                    <View style={styles.weekdayRow}>
+                      {weekdayLabels.map((label, index) => (
+                        <Text key={`${label}-${index}`} style={styles.weekdayText}>{label}</Text>
+                      ))}
+                    </View>
+                    <View style={styles.calendarGrid}>
+                      {calendarDays.map(day => {
+                        const selected = advancedFilters.date === day.value;
+
+                        return (
+                          <Pressable
+                            key={day.value}
+                            style={[
+                              styles.calendarDay,
+                              !day.inMonth && styles.calendarDayEmpty,
+                              selected && styles.calendarDaySelected,
+                            ]}
+                            disabled={!day.inMonth}
+                            onPress={() => {
+                              updateAdvancedFilter('date', day.value);
+                              setAdvancedDropdownOpen('');
+                            }}
+                          >
+                            <Text style={[styles.calendarDayText, selected && styles.calendarDayTextSelected]}>
+                              {day.label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    <Pressable
+                      style={styles.clearDateButton}
+                      onPress={() => {
+                        updateAdvancedFilter('date', '');
+                        setAdvancedDropdownOpen('');
+                      }}
+                    >
+                      <Text style={styles.clearDateText}>Any date</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.sortHeader}>
           <Text style={styles.sectionTitle}>Sort issues</Text>
@@ -349,10 +686,21 @@ export default function WelcomeScreen({ navigation }: Props) {
                   </Pressable>
                 </View>
 
-                <View style={styles.issueBody}>
+                <Pressable
+                  style={styles.issueBody}
+                  onPress={() => setExpandedIssueId(current => (current === issue.id ? '' : issue.id))}
+                  accessibilityLabel={`${expandedIssueId === issue.id ? 'Collapse' : 'Open'} ${issue.title}`}
+                >
                   <View style={styles.issueMetaRow}>
                     <Text style={styles.issueId}>{issue.id}</Text>
-                    <Text style={styles.issueDate}>{issue.createdLabel}</Text>
+                    <View style={styles.issueDateBlock}>
+                      <Text style={styles.issueDate}>{issue.createdLabel}</Text>
+                      <MaterialCommunityIcons
+                        name={expandedIssueId === issue.id ? 'chevron-up' : 'chevron-down'}
+                        size={17}
+                        color={theme.colors.muted}
+                      />
+                    </View>
                   </View>
                   <Text style={styles.issueTitle}>{issue.title}</Text>
                   <Text style={styles.issueSummary}>{issue.summary}</Text>
@@ -366,7 +714,26 @@ export default function WelcomeScreen({ navigation }: Props) {
                       <Text style={styles.footerText}>{issue.location}</Text>
                     </View>
                   </View>
-                </View>
+                  {expandedIssueId === issue.id ? (
+                    <View style={styles.issuePreview}>
+                      <View style={styles.previewRow}>
+                        <Text style={styles.previewLabel}>Status</Text>
+                        <Text style={styles.previewValue}>{issue.statusLabel}</Text>
+                      </View>
+                      {issue.department ? (
+                        <View style={styles.previewRow}>
+                          <Text style={styles.previewLabel}>Department</Text>
+                          <Text style={styles.previewValue}>{issue.department}</Text>
+                        </View>
+                      ) : null}
+                      <View style={styles.previewRow}>
+                        <Text style={styles.previewLabel}>Location</Text>
+                        <Text style={styles.previewValue}>{issue.location}</Text>
+                      </View>
+                      <Text style={styles.previewDescription}>{issue.description}</Text>
+                    </View>
+                  ) : null}
+                </Pressable>
               </View>
             );
           }) : (
@@ -376,6 +743,44 @@ export default function WelcomeScreen({ navigation }: Props) {
           )}
         </View>
       </ScrollView>
+
+      {menuOpen ? (
+        <>
+          <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)} accessibilityLabel="Close menu" />
+          <View style={styles.menuPanel}>
+            <Pressable
+              style={styles.menuItem}
+              onPress={() => {
+                setMenuOpen(false);
+                navigation.navigate('Tracking');
+              }}
+            >
+              <MaterialCommunityIcons name="clipboard-text-clock-outline" size={19} color={figmaGreen} />
+              <Text style={styles.menuItemText}>Status</Text>
+            </Pressable>
+            <Pressable
+              style={styles.menuItem}
+              onPress={() => {
+                setMenuOpen(false);
+                navigation.navigate('History');
+              }}
+            >
+              <MaterialCommunityIcons name="history" size={19} color={figmaGreen} />
+              <Text style={styles.menuItemText}>History</Text>
+            </Pressable>
+            <Pressable
+              style={styles.menuItem}
+              onPress={() => {
+                setMenuOpen(false);
+                navigation.navigate('AuthorityDashboard');
+              }}
+            >
+              <MaterialCommunityIcons name="office-building-cog-outline" size={19} color={figmaGreen} />
+              <Text style={styles.menuItemText}>Authority view</Text>
+            </Pressable>
+          </View>
+        </>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -408,10 +813,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  menuBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
+  },
   menuPanel: {
     position: 'absolute',
-    top: 42,
-    right: 0,
+    top: 90,
+    right: 11,
     width: 178,
     borderRadius: 18,
     backgroundColor: '#fff',
@@ -421,6 +830,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 20,
     elevation: 6,
+    zIndex: 11,
   },
   menuItem: {
     minHeight: 42,
@@ -479,6 +889,15 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     minHeight: 48,
   },
+  clearSearchButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(57, 64, 80, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 6,
+  },
   searchAction: {
     width: 35,
     height: 35,
@@ -487,6 +906,202 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 10,
+  },
+  searchActionActive: {
+    backgroundColor: '#111827',
+  },
+  searchFilterBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  searchFilterBadgeText: {
+    color: figmaGreen,
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  advancedPanel: {
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#e6ebef',
+    backgroundColor: '#fff',
+    padding: 14,
+    marginBottom: 20,
+  },
+  advancedHeader: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 10,
+  },
+  advancedTitle: {
+    color: '#111827',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  clearFiltersText: {
+    color: figmaGreen,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  advancedGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 9,
+  },
+  advancedField: {
+    flexGrow: 1,
+    flexBasis: 145,
+    gap: 6,
+  },
+  advancedLabel: {
+    color: theme.colors.muted,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  advancedInput: {
+    minHeight: 40,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e3e8df',
+    backgroundColor: '#f8fafc',
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '700',
+    paddingHorizontal: 11,
+  },
+  advancedSelect: {
+    minHeight: 40,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e3e8df',
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  advancedSelectText: {
+    flex: 1,
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  advancedSelectPlaceholder: {
+    color: '#8b93a1',
+  },
+  advancedMenu: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e3e8df',
+    backgroundColor: '#fff',
+    padding: 5,
+    gap: 4,
+  },
+  advancedOption: {
+    minHeight: 34,
+    borderRadius: 10,
+    justifyContent: 'center',
+    paddingHorizontal: 9,
+  },
+  advancedOptionActive: {
+    backgroundColor: figmaGreen,
+  },
+  advancedOptionText: {
+    color: '#394050',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  advancedOptionTextActive: {
+    color: '#fff',
+  },
+  calendarPanel: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e3e8df',
+    backgroundColor: '#fff',
+    padding: 10,
+    gap: 8,
+  },
+  calendarHeader: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  calendarNavButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#f0f7ed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarTitle: {
+    flex: 1,
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  weekdayRow: {
+    flexDirection: 'row',
+  },
+  weekdayText: {
+    width: `${100 / 7}%`,
+    color: theme.colors.muted,
+    fontSize: 10,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDay: {
+    width: `${100 / 7}%`,
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+  },
+  calendarDayEmpty: {
+    opacity: 0,
+  },
+  calendarDaySelected: {
+    backgroundColor: figmaGreen,
+  },
+  calendarDayText: {
+    color: '#394050',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  calendarDayTextSelected: {
+    color: '#fff',
+  },
+  clearDateButton: {
+    minHeight: 32,
+    borderRadius: 14,
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearDateText: {
+    color: figmaGreen,
+    fontSize: 12,
+    fontWeight: '900',
   },
   sortHeader: {
     flexDirection: 'row',
@@ -659,6 +1274,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  issueDateBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
   issueTitle: {
     color: '#111827',
     fontSize: 17,
@@ -686,5 +1306,38 @@ const styles = StyleSheet.create({
     color: theme.colors.muted,
     fontSize: 12,
     fontWeight: '700',
+  },
+  issuePreview: {
+    borderTopWidth: 1,
+    borderTopColor: '#eef1f4',
+    marginTop: 14,
+    paddingTop: 13,
+    gap: 8,
+  },
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  previewLabel: {
+    width: 82,
+    color: theme.colors.muted,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  previewValue: {
+    flex: 1,
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  previewDescription: {
+    color: '#394050',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 19,
+    marginTop: 2,
   },
 });

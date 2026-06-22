@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { routeToAuthority, sendCitizenConfirmation, translateToGerman, transcribeVoice } from '../api/mockAI';
 import { createCitizenReport } from '../data/reports';
 import { ReportSummary, RootStackParamList } from '../types';
@@ -24,23 +24,36 @@ function getCreatedLabel() {
   return `Today, ${hours}:${minutes}`;
 }
 
+function buildProcessingText(message: string, details: Array<string | undefined>) {
+  return [message.trim(), ...details.map(detail => detail?.trim()).filter(Boolean)].filter(Boolean).join('\n');
+}
+
 export default function ProcessingScreen({ route, navigation }: Props) {
   const [currentStep, setCurrentStep] = useState(0);
   const [summary, setSummary] = useState<ReportSummary | null>(null);
   const [translatedMessage, setTranslatedMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [editableTranscript, setEditableTranscript] = useState(route.params.citizenMessage.trim());
   const issueTitle = route.params.issueTitle?.trim() || 'Untitled issue';
   const fullName = route.params.fullName?.trim() || 'Anonymous citizen';
   const email = route.params.email?.trim() || 'No email provided';
   const address = route.params.address?.trim();
   const fileName = route.params.fileName?.trim();
-  const citizenMessage = route.params.citizenMessage.trim();
+  const processingDetails = [
+    address ? `Address: ${address}` : undefined,
+    email ? `Email: ${email}` : undefined,
+    fullName ? `Citizen: ${fullName}` : undefined,
+    route.params.hasPhoto ? 'Photo attached: yes' : undefined,
+    fileName ? `File attached: ${fileName}` : undefined,
+  ];
 
   useEffect(() => {
     let mounted = true;
 
-    const runSteps = async () => {
-      const voiceTranscript = await transcribeVoice(route.params.mockTranscript);
+    const runSteps = async (textToProcess: string) => {
+      setCurrentStep(0);
+      setSummary(null);
+      const voiceTranscript = await transcribeVoice(textToProcess);
       if (!mounted) {
         return;
       }
@@ -61,21 +74,28 @@ export default function ProcessingScreen({ route, navigation }: Props) {
       setCurrentStep(3);
     };
 
-    runSteps();
+    runSteps(buildProcessingText(route.params.citizenMessage, processingDetails));
 
     return () => {
       mounted = false;
     };
-  }, [route.params.mockTranscript]);
+  }, []);
 
   const handleContinue = async () => {
-    if (!summary || isSending) {
+    const citizenMessage = editableTranscript.trim();
+
+    if (!summary || isSending || !citizenMessage) {
       return;
     }
 
     setIsSending(true);
-    const confirmation = await sendCitizenConfirmation(summary);
-    const location = address || (summary.location === 'Auto-detected' ? 'Auto-detected by app' : summary.location);
+    const textToProcess = buildProcessingText(citizenMessage, processingDetails);
+    const nextTranslatedMessage = await translateToGerman(textToProcess);
+    const finalSummary = await routeToAuthority(nextTranslatedMessage);
+    setTranslatedMessage(nextTranslatedMessage);
+    setSummary(finalSummary);
+    const confirmation = await sendCitizenConfirmation(finalSummary);
+    const location = address || (finalSummary.location === 'Auto-detected' ? 'Auto-detected by app' : finalSummary.location);
     const attachments = [
       route.params.hasPhoto ? 'photo' : '',
       fileName ? fileName : '',
@@ -84,8 +104,8 @@ export default function ProcessingScreen({ route, navigation }: Props) {
     const createdAt = getCreatedLabel();
     const reportId = createCitizenReport({
       title: issueTitle,
-      issue: summary.issue,
-      department: summary.department,
+      issue: finalSummary.issue,
+      department: finalSummary.department,
       status: 'received',
       priority: 'medium',
       confidence: 88,
@@ -95,7 +115,7 @@ export default function ProcessingScreen({ route, navigation }: Props) {
       citizenName: fullName,
       citizenEmail: email,
       citizenMessage,
-      translatedMessage: translatedMessage || citizenMessage,
+      translatedMessage: nextTranslatedMessage || citizenMessage,
       publicUpdates: [
         {
           id: `citizen-${Date.now()}`,
@@ -117,9 +137,9 @@ export default function ProcessingScreen({ route, navigation }: Props) {
       reportId,
       citizenMessage: confirmation.citizenMessage,
       germanMessage: confirmation.germanMessage,
-      issue: summary.issue,
+      issue: finalSummary.issue,
       location,
-      department: summary.department,
+      department: finalSummary.department,
       nativeLanguage: route.params.nativeLanguage,
     });
   };
@@ -165,9 +185,22 @@ export default function ProcessingScreen({ route, navigation }: Props) {
             <Text style={styles.summaryText}>Department: {summary?.department ?? '...'}</Text>
           </View>
 
+          <View style={styles.transcriptCard}>
+            <Text style={styles.summaryTitle}>Transcription</Text>
+            <TextInput
+              style={styles.transcriptInput}
+              value={editableTranscript}
+              onChangeText={setEditableTranscript}
+              multiline
+              textAlignVertical="top"
+              placeholder="Edit the transcribed issue text"
+              placeholderTextColor="#8c8c8c"
+            />
+          </View>
+
           <Pressable
-            style={[styles.continueButton, (!readyToSend || isSending) && styles.continueButtonDisabled]}
-            disabled={!readyToSend || isSending}
+            style={[styles.continueButton, (!readyToSend || isSending || !editableTranscript.trim()) && styles.continueButtonDisabled]}
+            disabled={!readyToSend || isSending || !editableTranscript.trim()}
             onPress={handleContinue}
           >
             <Text style={styles.continueText}>{isSending ? 'Sending...' : 'Continue'}</Text>
@@ -280,6 +313,26 @@ const styles = StyleSheet.create({
     color: '#8c8c8c',
     marginBottom: 6,
     fontWeight: '500',
+  },
+  transcriptCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#8b7f7f',
+    padding: 18,
+  },
+  transcriptInput: {
+    minHeight: 116,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d7d7d7',
+    backgroundColor: '#f8fafc',
+    color: '#111',
+    fontSize: 14,
+    fontWeight: '500',
+    lineHeight: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   continueButton: {
     height: 46,
