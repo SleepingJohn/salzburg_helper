@@ -57,10 +57,10 @@ const STORAGE_KEY = 'salzcitizen.reports.v1';
 const seedReports: CitizenReport[] = [
   {
     id: 'SAL - 2026 - 00124',
-    title: 'General message from citizen',
-    issue: 'General message',
+    title: 'Lost item near Faberstrasse',
+    issue: 'Lost and found',
     location: 'Faberstrasse 10, 5020 Salzburg',
-    department: 'Citizen Service Center',
+    department: 'Lost and Found',
     status: 'received',
     priority: 'low',
     confidence: 88,

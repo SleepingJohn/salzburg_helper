@@ -352,10 +352,10 @@ export default function RecordScreen({ route, navigation }: Props) {
                 style={styles.locationInput}
                 value={address}
                 onChangeText={setAddress}
-                placeholder="Current location..."
+                placeholder="Location"
                 placeholderTextColor="#8c8c8c"
               />
-              <Pressable style={styles.blackIconButton} accessibilityLabel="Use current location">
+              <Pressable style={styles.blackIconButton} accessibilityLabel="Location">
                 <MaterialCommunityIcons name="crosshairs-gps" size={15} color="#f6f5f5" />
               </Pressable>
             </View>

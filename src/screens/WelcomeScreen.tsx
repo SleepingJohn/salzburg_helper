@@ -646,7 +646,7 @@ export default function WelcomeScreen({ navigation }: Props) {
         </View>
 
         <Pressable style={styles.reportButton} onPress={startIssue}>
-          <MaterialCommunityIcons name="microphone-plus" size={22} color="#fff" />
+          <MaterialCommunityIcons name="plus" size={22} color="#fff" />
           <Text style={styles.reportButtonText}>State an issue</Text>
         </Pressable>
 
@@ -1176,7 +1176,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.1,

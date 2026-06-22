@@ -30,6 +30,22 @@ function getSummaryForText(text: string): ReportSummary {
     return MOCK_REPORT.summary;
   }
 
+  if (
+    normalized.includes('lost') ||
+    normalized.includes('found') ||
+    normalized.includes('missing') ||
+    normalized.includes('wallet') ||
+    normalized.includes('keys') ||
+    normalized.includes('phone') ||
+    normalized.includes('bag')
+  ) {
+    return {
+      issue: 'Lost and found',
+      location: 'Auto-detected',
+      department: 'Lost and Found',
+    };
+  }
+
   return {
     issue: 'General message',
     location: 'Auto-detected',

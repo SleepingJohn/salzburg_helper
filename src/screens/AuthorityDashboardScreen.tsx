@@ -44,6 +44,7 @@ const caseStatusOptions: ReportStatus[] = [
 ];
 const departmentOptions = [
   'Citizen Service Center',
+  'Lost and Found',
   'Public Cleaning Services',
   'Waste Management',
   'Public Lighting',
